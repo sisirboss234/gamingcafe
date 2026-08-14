@@ -1,3 +1,11 @@
+<!-- PULSE FINAL FREE-PLAN TICKET CLEANUP
+     Staff-triggered cleanup:
+     - USED/scanned tickets: delete when their chosen session ends.
+     - Unscanned expired tickets: delete 2 hours after their chosen session ends.
+     - Active tickets: never delete.
+     - Cleanup runs when staff opens the scanner and before each scan.
+     - No Cloud Functions / Blaze plan required.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,6 +36,7 @@
     where,
     orderBy,
     updateDoc,
+    deleteDoc,
     doc,
     getDoc,
     serverTimestamp
@@ -953,9 +962,95 @@
   }
 
   /* ---------- Responsive ---------- */
+  /* ---------- Responsive / Mobile & Tablet Navigation ---------- */
   @media (max-width: 900px) {
-    .nav-links { display: none; }
-    .menu-toggle { display: block; }
+    .nav {
+      position: relative;
+      flex-wrap: wrap;
+      padding: 14px 24px;
+    }
+
+    .menu-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      flex: 0 0 44px;
+      background: transparent;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--bone);
+      font-size: 25px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 1002;
+    }
+
+    .menu-toggle:hover,
+    .menu-toggle[aria-expanded="true"] {
+      color: var(--cyan);
+      border-color: var(--cyan);
+      background: rgba(0,242,254,.06);
+    }
+
+    .nav-links,
+    .nav-right {
+      display: none;
+      width: 100%;
+      flex-basis: 100%;
+    }
+
+    .nav.mobile-menu-open .nav-links {
+      display: flex;
+      order: 10;
+      flex-direction: column;
+      gap: 0;
+      margin-top: 12px;
+      padding: 8px 0;
+      background: rgba(11,12,16,.98);
+      border-top: 1px solid var(--line);
+    }
+
+    .nav.mobile-menu-open .nav-links a {
+      width: 100%;
+      padding: 14px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav.mobile-menu-open .nav-links a:last-child {
+      border-bottom: none;
+    }
+
+    .nav.mobile-menu-open .nav-links a::after {
+      display: none;
+    }
+
+    .nav.mobile-menu-open .nav-right {
+      display: flex !important;
+      order: 11;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      padding: 10px 0 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .nav.mobile-menu-open .nav-right > * {
+      width: 100%;
+      min-height: 44px;
+    }
+
+    .nav.mobile-menu-open .nav-login {
+      text-align: left;
+      padding: 10px 8px;
+    }
+
+    .nav.mobile-menu-open .nav-cta {
+      text-align: center;
+    }
+
     .philosophy { grid-template-columns: 1fr; }
     .philo-collage { height: 320px; margin-top: 40px; }
     .program-grid { grid-template-columns: 1fr; }
@@ -966,10 +1061,15 @@
     .payment-options { flex-direction: column; }
     .ticket-body { grid-template-columns: 1fr; text-align: center; }
   }
+
   @media (max-width: 560px) {
+    .nav { padding: 12px 20px; }
+    .logo { font-size: 20px; }
     .wrap { padding: 0 20px; }
     .hero-actions { flex-direction: column; }
     .btn-primary, .btn-ghost { width: 100%; text-align: center; }
+    .payment-container { padding: 24px 18px; }
+    .ticket-section { padding: 22px 16px; }
   }
 
   a:focus-visible, button:focus-visible {
@@ -1291,7 +1391,7 @@
       <span class="nav-member" id="navMemberName">Hi, Gamer</span>
       <button class="nav-login" id="navLogoutBtn">Log Out</button>
     </div>
-    <button class="menu-toggle" aria-label="Menu">☰</button>
+    <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
   </nav>
 </header>
 
@@ -1795,6 +1895,7 @@
 
   // View Switcher Function
   function switchView(viewName) {
+    closeMobileMenu();
     document.querySelectorAll('.view-section').forEach(el => {
       el.classList.remove('active-view');
     });
@@ -1827,6 +1928,7 @@
   }
 
   function navigateToSection(sectionId) {
+    closeMobileMenu();
     switchView('home');
     if (sectionId === 'homeView') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1903,6 +2005,14 @@
   }
 
   function selectPassPlan(planName, price, durationHours, isNightOwl) {
+    // New checkout = new payment identity.
+    const paymentRandom =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    window.__pulsePaymentId =
+      'PAY-' + paymentRandom.replace(/-/g, '').toUpperCase();
+
     // A new purchase starts a completely fresh checkout session.
     window.__ticketGenerating = false;
     window.__pulseGenerating = false;
@@ -1948,13 +2058,15 @@
       quantityInput.value = '1';
       updateQuantitySummary();
 
-      // Payment QR codes are generated from the selected plan.
-      const payloadBase = `pulse_${planName.toLowerCase().replace(/\s+/g, '_')}_${price}`;
-      const esewaUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=esewa_${payloadBase}`;
-      const khaltiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=khalti_${payloadBase}`;
+      // Every checkout gets a brand-new payment ID.
+      // This prevents two payments for the same plan/price from sharing a QR.
+      const paymentRandom =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-      document.getElementById('esewaQrImg').src = esewaUrl;
-      document.getElementById('khaltiQrImg').src = khaltiUrl;
+      window.__pulsePaymentId =
+        'PAY-' + paymentRandom.replace(/-/g, '').toUpperCase();
 
       resetCheckoutForNewPurchase();
       initializePaymentMethod();
@@ -1999,6 +2111,7 @@
   document.addEventListener('input', (event) => {
     if (event.target && event.target.id === 'ticketQuantity') {
       updateQuantitySummary();
+      initializePaymentMethod();
     }
   });
 
@@ -2088,8 +2201,33 @@
         startTime: chosenTime,
         durationHours: Number(currentSelectedPlan.durationHours || 0),
         zone: chosenZone,
+        ticketId: uniqueToken,
+        paymentId: window.__pulsePaymentId || '',
+        paymentMethod: 'QR',
+        paymentTotal: Number(currentSelectedPlan.price || 0) *
+          (typeof quantity !== 'undefined' ? Number(quantity) : getTicketQuantity()),
         paymentStatus: 'PAID',
         ticketStatus: 'UNUSED',
+        expiresAt: (() => {
+          try {
+            const parts = String(timeRange).split(/\s*[–-]\s*/);
+            const endText = parts.length > 1 ? parts[parts.length - 1].trim() : '';
+            const end = parseTimePart(endText);
+            if (!end) return null;
+
+            const expiry = new Date(`${chosenDate}T00:00:00`);
+            expiry.setHours(end.hour, end.minute, 0, 0);
+
+            const start = parseTimePart(chosenTime);
+            if (start && start.hour >= 20 && end.hour < start.hour) {
+              expiry.setDate(expiry.getDate() + 1);
+            }
+
+            return expiry.getTime() > Date.now() ? expiry.toISOString() : null;
+          } catch {
+            return null;
+          }
+        })(),
         qrUrl:
           'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' +
           encodeURIComponent(uniqueToken),
@@ -2118,6 +2256,7 @@
     // Clear the checkout state after successful payment so a second click
     // cannot regenerate the same purchase.
     currentSelectedPlan = null;
+    window.__pulsePaymentId = null;
 
     if (dateEl) dateEl.value = '';
     if (timeEl) timeEl.value = '';
@@ -2177,8 +2316,6 @@
         );
 
         const snapshot = await getDocs(q);
-        const currentDateStr = new Date().toISOString().split('T')[0];
-
         const userTickets = snapshot.docs
           .map(d => ({ firestoreId: d.id, ...d.data() }))
           .filter(ticket => ticket.ticketStatus !== "USED")
@@ -2197,7 +2334,9 @@
         container.innerHTML = '';
 
         userTickets.forEach(ticket => {
-          const isExpired = ticket.date < currentDateStr;
+          const validity = getTicketValidity(ticket);
+          const isExpired = !validity.valid && validity.reason === 'Ticket expired';
+          const isUsed = !validity.valid && validity.reason === 'Ticket already scanned';
 
           const ticketEl = document.createElement('div');
           ticketEl.className = `ticket-section ${isExpired ? 'expired' : ''}`;
@@ -2213,7 +2352,7 @@
             <div class="ticket-header">
               <div class="ticket-brand">PUL<span>SE</span> PASS</div>
               <div class="ticket-status-badge ${isExpired ? 'expired-badge' : ''}">
-                ${isExpired ? 'Expired' : 'Active / Valid'}
+                ${isExpired ? 'Expired' : (isUsed ? 'Used' : 'Active / Valid')}
               </div>
             </div>
             <div class="ticket-body">
@@ -2281,8 +2420,24 @@
       document.getElementById('staffSignedInEmail').textContent =
         'Signed in as: ' + user.email;
 
+      // Free-plan cleanup: remove tickets that are already eligible before
+      // the staff scanner starts.
+      const result = document.getElementById('scanResult');
+      result.className = '';
+      result.textContent = 'Checking old tickets…';
+
+      const cleanup = await cleanupOldTickets();
+      if (cleanup.error) {
+        result.textContent = 'Scanner ready. Automatic cleanup could not complete.';
+      } else {
+        result.textContent =
+          cleanup.deleted
+            ? `Cleaned up ${cleanup.deleted} old ticket${cleanup.deleted === 1 ? '' : 's'}.`
+            : 'Scanner ready. No old tickets to clean up.';
+      }
+
       // html5-qrcode is loaded with defer; wait briefly if needed.
-      setTimeout(() => startStaffScanner(), 150);
+      setTimeout(() => startStaffScanner(), 300);
     });
   }
 
@@ -2346,9 +2501,15 @@
   }
 
   async function handleScannedTicket(token) {
+    // Scanner must validate the current ticket before allowing entry.
+
     if (!token) return;
 
     const result = document.getElementById('scanResult');
+
+    // Keep the free-plan cleanup current even if the scanner page has been
+    // open for a long time.
+    await cleanupOldTickets();
     result.className = '';
     result.textContent = 'Checking ticket...';
 
@@ -2382,8 +2543,6 @@
 
         const ticketDoc = snapshot.docs[0];
         const ticket = ticketDoc.data();
-        const today = new Date().toISOString().split('T')[0];
-
         if (ticket.paymentStatus !== "PAID") {
           result.className = 'scan-error';
           result.innerHTML = '<strong>❌ PAYMENT NOT VERIFIED</strong>';
@@ -2399,11 +2558,13 @@
           return;
         }
 
-        if (ticket.date < today) {
+        const validity = getTicketValidity(ticket);
+
+        if (!validity.valid) {
           result.className = 'scan-error';
           result.innerHTML = `
-            <strong>❌ EXPIRED</strong><br>
-            Valid date was ${String(ticket.date)}
+            <strong>❌ ${validity.reason === 'Ticket already scanned' ? 'ALREADY USED' : 'EXPIRED'}</strong><br>
+            ${validity.expiry ? `Session ended: ${validity.expiry.toLocaleString()}` : ''}
           `;
           return;
         }
@@ -2435,6 +2596,52 @@
       }
     });
   }
+
+  // ---------- Mobile / Tablet Navigation ----------
+  const mobileNav = document.querySelector('.nav');
+  const mobileMenuToggle = document.querySelector('.menu-toggle');
+
+  function closeMobileMenu() {
+    if (!mobileNav || !mobileMenuToggle) return;
+    mobileNav.classList.remove('mobile-menu-open');
+    mobileMenuToggle.setAttribute('aria-expanded', 'false');
+    mobileMenuToggle.setAttribute('aria-label', 'Open menu');
+    mobileMenuToggle.textContent = '☰';
+  }
+
+  function toggleMobileMenu() {
+    if (!mobileNav || !mobileMenuToggle) return;
+    const isOpen = mobileNav.classList.toggle('mobile-menu-open');
+    mobileMenuToggle.setAttribute('aria-expanded', String(isOpen));
+    mobileMenuToggle.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
+    mobileMenuToggle.textContent = isOpen ? '×' : '☰';
+  }
+
+  mobileMenuToggle?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleMobileMenu();
+  });
+
+  document.querySelectorAll('.nav-links a, .nav-right button').forEach((item) => {
+    item.addEventListener('click', closeMobileMenu);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (
+      mobileNav?.classList.contains('mobile-menu-open') &&
+      !mobileNav.contains(event.target)
+    ) {
+      closeMobileMenu();
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeMobileMenu();
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) closeMobileMenu();
+  });
 
   // Firebase Auth Integration Logic
   window.addEventListener('DOMContentLoaded', async () => {
@@ -2580,11 +2787,181 @@
     openStaffScanner,
     startStaffScanner,
     stopStaffScanner,
-    handleScannedTicket
+    handleScannedTicket,
+    closeMobileMenu,
+    getTicketValidity,
+    consumeTicketAfterScan
   });
+
+  // ---------- Ticket validity / free-plan cleanup ----------
+  // Cleanup runs when staff opens the scanner and before each scan.
+  // No Cloud Functions or paid Firebase plan is required.
+
+  const EXPIRED_RETENTION_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+  function parseTimePart(timeText) {
+    if (!timeText) return null;
+
+    const match = String(timeText).trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (!match) return null;
+
+    let hour = Number(match[1]);
+    const minute = Number(match[2] || 0);
+    const meridiem = match[3].toUpperCase();
+
+    if (hour === 12) hour = 0;
+    if (meridiem === 'PM') hour += 12;
+
+    if (hour > 23 || minute > 59) return null;
+    return { hour, minute };
+  }
+
+  function getSessionEndDate(ticket) {
+    if (!ticket) return null;
+
+    // New tickets can use the explicit expiry timestamp.
+    if (ticket.expiresAt) {
+      const explicit = new Date(ticket.expiresAt);
+      if (!Number.isNaN(explicit.getTime())) return explicit;
+    }
+
+    const dateValue = ticket.date || ticket.bookingDate;
+    if (!dateValue) return null;
+
+    const range = String(ticket.time || '');
+    const parts = range.split(/\s*[–-]\s*/);
+    const endPart = parts.length > 1 ? parts[parts.length - 1].trim() : '';
+
+    let end = parseTimePart(endPart);
+
+    // Fallback to a stored endTime if present.
+    if (!end && ticket.endTime) {
+      end = parseTimePart(ticket.endTime);
+    }
+
+    if (!end) return null;
+
+    const result = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(result.getTime())) return null;
+
+    result.setHours(end.hour, end.minute, 0, 0);
+
+    // Night Owl (11 PM–6 AM) ends the following calendar day.
+    const start = parseTimePart(String(ticket.startTime || '').trim());
+    if (start && start.hour >= 20 && end.hour < start.hour) {
+      result.setDate(result.getDate() + 1);
+    }
+
+    return result;
+  }
+
+  function getTicketExpiryDate(ticket) {
+    return getSessionEndDate(ticket);
+  }
+
+  function getTicketValidity(ticket) {
+    if (!ticket) {
+      return { valid: false, reason: 'Ticket not found' };
+    }
+
+    if (
+      String(ticket.ticketStatus || '').toUpperCase() === 'USED' ||
+      ticket.scannedAt ||
+      ticket.usedAt
+    ) {
+      return { valid: false, reason: 'Ticket already scanned' };
+    }
+
+    const expiry = getSessionEndDate(ticket);
+
+    // If there is no usable session end, do NOT incorrectly mark a new ticket
+    // as expired. It remains valid until staff can verify the session.
+    if (!expiry) {
+      return { valid: true, reason: 'Ticket valid', expiry: null };
+    }
+
+    if (expiry.getTime() <= Date.now()) {
+      return { valid: false, reason: 'Ticket expired', expiry };
+    }
+
+    return { valid: true, reason: 'Ticket valid', expiry };
+  }
+
+  async function cleanupOldTickets() {
+    try {
+      const {
+        auth, db, collection, getDocs, query, where, deleteDoc
+      } = await window.__forgeAuthReady;
+
+      const staffUser = auth.currentUser;
+      if (!staffUser || !isStaffEmail(staffUser.email)) return { deleted: 0 };
+
+      // Read tickets in batches using the fields the current free-plan rules
+      // already support. We inspect every ticket visible to staff and only
+      // delete tickets that meet the exact retention rules.
+      const snapshot = await getDocs(collection(db, 'tickets'));
+      const now = Date.now();
+      const deletions = [];
+
+      snapshot.docs.forEach(ticketDoc => {
+        const ticket = ticketDoc.data();
+
+        const status = String(ticket.ticketStatus || '').toUpperCase();
+        const sessionEnd = getSessionEndDate(ticket);
+
+        // USED: delete only after the chosen session has ended.
+        if (status === 'USED' || ticket.scannedAt || ticket.usedAt) {
+          if (sessionEnd && sessionEnd.getTime() <= now) {
+            deletions.push(deleteDoc(ticketDoc.ref));
+          }
+          return;
+        }
+
+        // UNUSED/EXPIRED: keep for 2 hours after actual session end.
+        if (sessionEnd) {
+          const deleteAfter = sessionEnd.getTime() + EXPIRED_RETENTION_MS;
+          if (deleteAfter <= now) {
+            deletions.push(deleteDoc(ticketDoc.ref));
+          }
+        }
+      });
+
+      if (deletions.length) {
+        await Promise.all(deletions);
+      }
+
+      return { deleted: deletions.length };
+    } catch (err) {
+      console.error('Ticket cleanup failed:', err);
+      return { deleted: 0, error: err };
+    }
+  }
+
+  async function consumeTicketAfterScan(ticketRef, ticket, staffUser, updateDoc, serverTimestamp) {
+    const validity = getTicketValidity(ticket);
+
+    if (!validity.valid) return validity;
+
+    const sessionEnd = getSessionEndDate(ticket);
+
+    await updateDoc(ticketRef, {
+      ticketStatus: 'USED',
+      scannedAt: serverTimestamp(),
+      usedAt: serverTimestamp(),
+      usedBy: staffUser.email
+    });
+
+    return {
+      valid: false,
+      used: true,
+      reason: 'Ticket scanned successfully',
+      sessionEnd
+    };
+  }
 
   function resetCheckoutForNewPurchase() {
     window.__ticketGenerating = false;
+    window.__pulsePaymentId = null;
     window.__pulseGenerating = false;
 
     const button = document.getElementById('payButton');
@@ -2597,11 +2974,42 @@
 
   function initializePaymentMethod() {
     if (!currentSelectedPlan) return;
-    const base = `pulse_${currentSelectedPlan.name.toLowerCase().replace(/\s+/g, '_')}_${currentSelectedPlan.price}`;
+
+    // One unique payment ID belongs to one checkout/payment attempt.
+    if (!window.__pulsePaymentId) {
+      const paymentRandom =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+      window.__pulsePaymentId =
+        'PAY-' + paymentRandom.replace(/-/g, '').toUpperCase();
+    }
+
+    const paymentId = window.__pulsePaymentId;
+    const total = currentSelectedPlan.price * getTicketQuantity();
+
+    // Demo payloads are unique per payment. For production, replace these
+    // payloads with the server-generated eSewa/Khalti payment/order payload.
+    const esewaPayload =
+      `PULSE|ESEWA|${paymentId}|${currentSelectedPlan.name}|${total}`;
+    const khaltiPayload =
+      `PULSE|KHALTI|${paymentId}|${currentSelectedPlan.name}|${total}`;
+
     const esewa = document.getElementById('esewaQrImg');
     const khalti = document.getElementById('khaltiQrImg');
-    if (esewa) esewa.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent('esewa_' + base)}`;
-    if (khalti) khalti.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent('khalti_' + base)}`;
+
+    if (esewa) {
+      esewa.src =
+        `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(esewaPayload)}`;
+      esewa.alt = `Unique eSewa payment QR ${paymentId}`;
+    }
+
+    if (khalti) {
+      khalti.src =
+        `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(khaltiPayload)}`;
+      khalti.alt = `Unique Khalti payment QR ${paymentId}`;
+    }
   }
 
 </script>
