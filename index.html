@@ -40,7 +40,6 @@
     doc,
     getDoc,
     runTransaction,
-    onSnapshot,
     serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -72,7 +71,6 @@
     doc,
     getDoc,
     runTransaction,
-    onSnapshot,
     serverTimestamp,
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -2345,8 +2343,24 @@
   // HARD CHECK: a customer cannot purchase a session whose start time has already passed today.
   if (!validateBookingTimeBeforePurchase(chosenDate, chosenTime)) return;
 
-  // The displayed count is live, but the Firestore transaction below is the
-  // authoritative final check when several users book simultaneously.
+  // Re-check seats immediately before creating tickets so a stale availability display cannot overbook.
+  const liveTimeRange = currentSelectedPlan.isNightOwl
+    ? '11:00 PM – 6:00 AM'
+    : `${formatHour(Number(chosenTime.split(':')[0]))} – ${formatHour(Number(chosenTime.split(':')[0]) + Number(currentSelectedPlan.durationHours || 0))}`;
+  const liveAvailableSeats = await getAvailableSeatsForSelection({
+    bookingDate: chosenDate, time: liveTimeRange, zone: chosenZone
+  });
+  renderSeatAvailability(document.getElementById('seatAvailability') || document.getElementById('availableSeats'), liveAvailableSeats, quantity);
+  if (liveAvailableSeats < quantity) {
+    showBookingPopup(
+      liveAvailableSeats > 0
+        ? `Only ${liveAvailableSeats} seat${liveAvailableSeats === 1 ? '' : 's'} remain for this session. You selected ${quantity}. Please reduce the number of tickets.`
+        : 'This session is sold out. Please choose another date, time, or zone.',
+      liveAvailableSeats > 0 ? '🎮 Not enough seats' : '🚫 Session sold out'
+    );
+    return;
+  }
+
   const payButton = document.getElementById('payButton');
   const originalButtonText =
     payButton?.dataset.originalText ||
@@ -2459,16 +2473,57 @@
       });
     }
 
-    // Every ticket gets its own unique token. Use addDoc for every ticket so
-    // ticket generation does not depend on the optional writeBatch/doc bridge.
-    // Atomic seat reservation + ticket creation. This is what prevents two
-    // users from buying the same remaining seats at the same time.
-    await reserveSeatsAndCreateTickets({
-      bookingDate: chosenDate,
-      startTime: chosenTime,
-      zone: chosenZone,
-      quantity,
-      tickets
+    // FINAL ATOMIC BOOKING:
+    // The browser display above is only informational. This Firestore transaction is
+    // the authoritative check, so simultaneous users cannot overbook the same
+    // date + session + zone. Ticket documents and the seat counter are committed
+    // together in one transaction.
+    const { doc, getDoc, runTransaction } = await window.__forgeAuthReady;
+    const counterRef = getSeatCounterRef(db, chosenDate, timeRange, chosenZone);
+    const ticketRefs = tickets.map(ticket => doc(db, 'tickets', ticket.token));
+
+    // If this is an existing installation with old ticket documents, use the old
+    // ticket count only to seed a missing counter. Once the counter exists, all
+    // future bookings are controlled atomically by Firestore.
+    const legacyAvailable = liveAvailableSeats;
+    const legacyBooked = Math.max(0, SEATS_PER_ZONE - legacyAvailable);
+
+    await runTransaction(db, async (transaction) => {
+      // Active paid ticket documents are authoritative. Reading them inside the
+      // transaction also repairs any stale seatCounters document automatically.
+      const allTicketsSnap = await transaction.get(collection(db, 'tickets'));
+
+      const key = `${String(chosenDate).trim()}__${normalizeBookingTime(timeRange)}__${normalizeZone(chosenZone)}`;
+      let activeBooked = 0;
+      allTicketsSnap.docs.forEach(ticketDoc => {
+        const ticket = ticketDoc.data() || {};
+        if (getSeatKey(ticket) === key) activeBooked += getReservedSeatCount(ticket);
+      });
+
+      const booked = Math.min(SEATS_PER_ZONE, Math.max(0, activeBooked));
+      const available = Math.max(0, SEATS_PER_ZONE - booked);
+
+      if (available < quantity) {
+        throw new Error(
+          available > 0
+            ? `Only ${available} seat${available === 1 ? '' : 's'} remain. Someone else may have just booked seats. Please refresh and try again.`
+            : 'This session is sold out. Someone else may have just booked the remaining seats.'
+        );
+      }
+
+      transaction.set(counterRef, {
+        total: SEATS_PER_ZONE,
+        booked: booked + quantity,
+        available: SEATS_PER_ZONE - booked - quantity,
+        date: chosenDate,
+        time: normalizeBookingTime(timeRange),
+        zone: normalizeZone(chosenZone),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      tickets.forEach((ticket, index) => {
+        transaction.set(ticketRefs[index], ticket);
+      });
     });
 
     // Clear the checkout state after successful payment so a second click
@@ -2516,8 +2571,7 @@
       payButton.textContent = 'Confirm Demo Payment — Generate Ticket';
     }
 
-    const msg = String(err?.message || 'Ticket could not be generated. Please try again.');
-    showBookingPopup(`⚠️ ${msg}`, 'Booking could not be completed');
+    showBookingPopup(`⚠️ ${err?.message || 'Booking could not be completed. Please try again.'}`, 'Booking could not be completed');
   }
 }
 
@@ -2653,8 +2707,8 @@
       document.getElementById('staffSignedInEmail').textContent =
         'Signed in as: ' + user.email;
 
-      // Free-plan cleanup: remove tickets that are already eligible before
-      // the staff scanner starts.
+      // Staff-only cleanup: eligible tickets are deleted when the Staff Scanner
+      // is opened. Cleanup is not run from customer pages or during every scan.
       const result = document.getElementById('scanResult');
       result.className = '';
       result.textContent = 'Checking old tickets…';
@@ -2740,9 +2794,8 @@
 
     const result = document.getElementById('scanResult');
 
-    // Keep the free-plan cleanup current even if the scanner page has been
-    // open for a long time.
-    await cleanupOldTickets();
+    // Cleanup is intentionally NOT run for every scan.
+    // It runs when the staff scanner is opened, as requested.
     result.className = '';
     result.textContent = 'Checking ticket...';
 
@@ -2750,7 +2803,7 @@
     await stopStaffScanner();
 
     window.__forgeAuthReady.then(async ({
-      auth, db, collection, getDocs, query, where, updateDoc, doc, serverTimestamp
+      auth, db, collection, getDocs, query, where
     }) => {
       const staffUser = auth.currentUser;
 
@@ -2794,14 +2847,14 @@
         const validity = getTicketValidity(ticket);
 
         if (!validity.valid) {
-          if (validity.reason === 'Session not started') {
+          if (validity.reason === 'Session not open for scanning') {
             result.className = 'scan-error';
             result.innerHTML = `
               <div class="early-entry-popup" style="padding:18px;border:1px solid #00f2fe;border-radius:12px;background:rgba(0,242,254,.06);">
-                <strong style="font-size:20px;color:#00f2fe;">⏳ NOT YET — SESSION HASN'T STARTED</strong><br><br>
-                <span style="color:#fff;">This ticket is valid, but entry opens at:</span><br>
-                <strong style="font-size:18px;color:#00ffcc;">${validity.start ? validity.start.toLocaleString() : 'the selected session time'}</strong><br><br>
-                <span style="color:#cfd5df;">Please ask the customer to wait until the session begins.</span>
+                <strong style="font-size:20px;color:#00f2fe;">⏳ TOO EARLY TO SCAN</strong><br><br>
+                <span style="color:#fff;">Staff can scan this ticket starting 30 minutes before the session.</span><br>
+                <strong style="font-size:18px;color:#00ffcc;">${validity.earlyScanAt ? validity.earlyScanAt.toLocaleString() : '30 minutes before the session'}</strong><br><br>
+                <span style="color:#cfd5df;">Session starts: ${validity.start ? validity.start.toLocaleString() : 'the selected session time'}</span>
               </div>
             `;
           } else {
@@ -2814,15 +2867,25 @@
           return;
         }
 
-        await updateDoc(doc(db, "tickets", ticketDoc.id), {
-          ticketStatus: "USED",
-          usedAt: serverTimestamp(),
-          usedBy: staffUser.email
-        });
+        // Atomically mark this ticket USED and release exactly one seat from
+        // the shared Date + Session + Zone seat pool. This prevents double scans
+        // and keeps availability synchronized with active tickets.
+        const consumed = await consumeTicketAfterScan(
+          ticketDoc.ref,
+          ticket,
+          staffUser
+        );
+
+        if (!consumed.used) {
+          result.className = 'scan-error';
+          result.innerHTML = `<strong>❌ ${String(consumed.reason || 'Ticket could not be scanned.')}</strong>`;
+          return;
+        }
 
         result.className = 'scan-ok';
         result.innerHTML = `
           <strong>✅ ENTRY ALLOWED</strong><br>
+          <span style="color:#00ffcc;">Early-entry window: up to 30 minutes before session</span><br>
           Ticket: ${String(ticket.token)}<br>
           Customer: ${String(ticket.userName || '')}<br>
           Pass: ${String(ticket.planName || '')}<br>
@@ -3210,8 +3273,17 @@
     return raw;
   }
 
+  // IMPORTANT: Seat capacity belongs to the physical zone, NOT to the pass.
+  // Premium/Pro/Standard/etc. that use the same zone share the exact same pool.
+  // Canonicalizing the zone name also makes different labels such as
+  // "Zone A — Esports" and "ZONE A" point to the same seat counter.
   function normalizeZone(value) {
-    return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+    const raw = String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+    if (!raw) return '';
+    if (/\bZONE\s*A\b/.test(raw) || /\bA\s*[—-]/.test(raw)) return 'ZONE A';
+    if (/\bZONE\s*B\b/.test(raw) || /\bB\s*[—-]/.test(raw)) return 'ZONE B';
+    if (/\bZONE\s*C\b/.test(raw) || /\bC\s*[—-]/.test(raw)) return 'ZONE C';
+    return raw;
   }
 
   function getSeatKey(data) {
@@ -3230,104 +3302,47 @@
 
   function getReservedSeatCount(ticket) {
     const status = String(ticket?.ticketStatus || '').toUpperCase();
+    const paymentStatus = String(ticket?.paymentStatus || '').toUpperCase();
 
-    // Every generated Firestore ticket document represents ONE seat/QR.
-    // The old code stored the whole purchase quantity on every ticket document,
-    // so buying 5 seats could incorrectly reserve 25 seats.
-    if (ticket?.paymentStatus && String(ticket.paymentStatus).toUpperCase() !== 'PAID') {
-      return 0;
-    }
-    if (status === 'CANCELLED' || status === 'REFUNDED') return 0;
+    // One generated Firestore ticket document represents exactly ONE physical seat.
+    // Only paid, active tickets consume capacity. A scanned/USED ticket releases it.
+    if (paymentStatus && paymentStatus !== 'PAID') return 0;
+    if (status === 'CANCELLED' || status === 'REFUNDED' || status === 'USED') return 0;
 
     return 1;
   }
 
+  function getSeatCounterRef(db, bookingDate, time, zone) {
+    // ONE shared counter per DATE + SESSION + PHYSICAL ZONE.
+    // Pass type is deliberately NOT part of this key.
+    const key = `${String(bookingDate).trim()}__${normalizeBookingTime(time)}__${normalizeZone(zone)}`;
+    const safeId = encodeURIComponent(key).replace(/%/g, '_');
+    return doc(db, 'seatCounters', safeId);
+  }
+
   async function getAvailableSeatsForSelection({ bookingDate, time, zone }) {
-    const { db, collection, getDocs, doc, getDoc } = await window.__forgeAuthReady;
+    const { db, doc, getDoc, collection, getDocs } = await window.__forgeAuthReady;
     const key = `${String(bookingDate).trim()}__${normalizeBookingTime(time)}__${normalizeZone(zone)}`;
-    const counterRef = doc(db, 'seatCounters', key);
-    const counterSnap = await getDoc(counterRef);
 
-    if (counterSnap.exists()) {
-      const data = counterSnap.data();
-      return Math.max(0, Number(data.total || SEATS_PER_ZONE) - Number(data.booked || 0));
-    }
-
-    // First-time migration: include existing paid tickets before the counter exists.
-    const snapshot = await getDocs(collection(db, 'tickets'));
-    let booked = 0;
-    snapshot.docs.forEach(ticketDoc => {
-      const ticket = ticketDoc.data();
-      if (getSeatKey(ticket) === key) booked += getReservedSeatCount(ticket);
-    });
-    return Math.max(0, SEATS_PER_ZONE - booked);
-  }
-
-  async function reserveSeatsAndCreateTickets({ bookingDate, startTime, zone, quantity, tickets }) {
-    const { db, collection, doc, query, where, runTransaction, serverTimestamp } = await window.__forgeAuthReady;
-    const key = `${String(bookingDate).trim()}__${normalizeBookingTime(startTime)}__${normalizeZone(zone)}`;
-    const counterRef = doc(db, 'seatCounters', key);
-    const ticketRefs = tickets.map(() => doc(collection(db, 'tickets')));
-
-    await runTransaction(db, async (transaction) => {
-      const counterSnap = await transaction.get(counterRef);
+    // Existing paid tickets are the source of truth for what is currently booked.
+    // This fixes old/stale counters and immediately reflects scanned tickets.
+    try {
+      const snapshot = await getDocs(collection(db, 'tickets'));
       let booked = 0;
-
-      if (counterSnap.exists()) {
-        booked = Number(counterSnap.data().booked || 0);
-      } else {
-        // Initialize the counter from existing ticket documents exactly once.
-        const existing = await transaction.get(query(collection(db, 'tickets'), where('bookingDate', '==', String(bookingDate).trim())));
-        existing.docs.forEach(ticketDoc => {
-          const ticket = ticketDoc.data();
-          if (getSeatKey(ticket) === key) booked += getReservedSeatCount(ticket);
-        });
-      }
-
-      const available = Math.max(0, SEATS_PER_ZONE - booked);
-      if (available < quantity) {
-        throw new Error(`Only ${available} seat${available === 1 ? '' : 's'} remaining for this date, session and zone.`);
-      }
-
-      transaction.set(counterRef, {
-        total: SEATS_PER_ZONE,
-        booked: booked + quantity,
-        date: String(bookingDate).trim(),
-        startTime: normalizeBookingTime(startTime),
-        zone: normalizeZone(zone),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      tickets.forEach((ticket, index) => {
-        transaction.set(ticketRefs[index], ticket);
+      snapshot.docs.forEach(ticketDoc => {
+        const ticket = ticketDoc.data() || {};
+        if (getSeatKey(ticket) === key) booked += getReservedSeatCount(ticket);
       });
-    });
-  }
-
-  let seatAvailabilityUnsubscribe = null;
-
-  async function subscribeSeatAvailability({ bookingDate, time, zone, quantity = 1 }) {
-    const availabilityEl = document.getElementById('seatAvailability') || document.getElementById('availableSeats');
-    if (!availabilityEl || !bookingDate || !time || !zone) return;
-
-    if (seatAvailabilityUnsubscribe) {
-      seatAvailabilityUnsubscribe();
-      seatAvailabilityUnsubscribe = null;
+      return Math.max(0, SEATS_PER_ZONE - Math.min(SEATS_PER_ZONE, booked));
+    } catch (ticketReadError) {
+      console.warn('Could not read ticket availability; using seat counter:', ticketReadError);
+      const counterRef = getSeatCounterRef(db, bookingDate, time, zone);
+      const counterSnap = await getDoc(counterRef);
+      if (!counterSnap.exists()) return SEATS_PER_ZONE;
+      const data = counterSnap.data() || {};
+      const booked = Math.max(0, Number(data.booked || 0));
+      return Math.max(0, SEATS_PER_ZONE - Math.min(SEATS_PER_ZONE, booked));
     }
-
-    const { db, doc, onSnapshot } = await window.__forgeAuthReady;
-    const key = `${String(bookingDate).trim()}__${normalizeBookingTime(time)}__${normalizeZone(zone)}`;
-    const counterRef = doc(db, 'seatCounters', key);
-
-    seatAvailabilityUnsubscribe = onSnapshot(counterRef, async snap => {
-      const available = snap.exists()
-        ? Math.max(0, Number(snap.data().total || SEATS_PER_ZONE) - Number(snap.data().booked || 0))
-        : await getAvailableSeatsForSelection({ bookingDate, time, zone });
-      renderSeatAvailability(availabilityEl, available, quantity);
-    }, err => console.error('Live seat availability listener failed:', err));
-
-    const initial = await getAvailableSeatsForSelection({ bookingDate, time, zone });
-    renderSeatAvailability(availabilityEl, initial, quantity);
   }
 
   function renderSeatAvailability(container, available, quantity = 1) {
@@ -3339,6 +3354,7 @@
       <div class="seat-availability ${canBuy ? 'available' : 'sold-out'}">
         <strong>${available > 0 ? '🎮 Seat Availability' : '🚫 Fully Booked'}</strong>
         <span class="seat-count-line">📌 ${sold} booked · 🪑 ${available} remaining · ${SEATS_PER_ZONE} total</span>
+        <span>🔗 Seats are shared across every pass using this zone for this date &amp; session.</span>
         <span>${canBuy
           ? `✨ ${quantity} seat${quantity === 1 ? '' : 's'} selected — ${available - quantity} will remain after this booking`
           : '⚠️ Please reduce your selection or choose another session.'}</span>
@@ -3546,10 +3562,19 @@
     const start = getSessionStartDate(ticket);
     const expiry = getSessionEndDate(ticket);
 
-    // Do not allow a ticket to be scanned/used before its selected session starts.
-    // Future bookings remain purchasable; entry is simply locked until the start time.
-    if (start && start.getTime() > Date.now()) {
-      return { valid: false, reason: 'Session not started', start, expiry };
+    // Staff may scan a ticket up to 30 minutes before its selected session starts.
+    // Example: a 7:00 PM ticket can be scanned from 6:30 PM onward.
+    // This window is calculated from the ticket's own session time, not from
+    // the time the staff member opens the scanner.
+    const EARLY_SCAN_MS = 30 * 60 * 1000;
+    if (start && Date.now() < start.getTime() - EARLY_SCAN_MS) {
+      return {
+        valid: false,
+        reason: 'Session not open for scanning',
+        start,
+        expiry,
+        earlyScanAt: new Date(start.getTime() - EARLY_SCAN_MS)
+      };
     }
 
     // If there is no usable session end, do NOT incorrectly mark a new ticket
@@ -3617,22 +3642,55 @@
 
   async function consumeTicketAfterScan(ticketRef, ticket, staffUser, updateDoc, serverTimestamp) {
     const validity = getTicketValidity(ticket);
-
     if (!validity.valid) return validity;
 
     const sessionEnd = getSessionEndDate(ticket);
+    const { db, runTransaction } = await window.__forgeAuthReady;
 
-    await updateDoc(ticketRef, {
-      ticketStatus: 'USED',
-      scannedAt: serverTimestamp(),
-      usedAt: serverTimestamp(),
-      usedBy: staffUser.email
+    const bookingDate = String(ticket?.bookingDate || ticket?.date || '').trim();
+    const bookingTime = ticket?.startTime || ticket?.time || '';
+    const zone = ticket?.zone || ticket?.selectedZone || '';
+    const counterRef = getSeatCounterRef(db, bookingDate, bookingTime, zone);
+
+    // Mark the ticket USED and release exactly ONE seat atomically.
+    await runTransaction(db, async (transaction) => {
+      const freshTicketSnap = await transaction.get(ticketRef);
+      const counterSnap = await transaction.get(counterRef);
+
+      if (!freshTicketSnap.exists()) throw new Error('Ticket no longer exists.');
+
+      const freshTicket = freshTicketSnap.data() || {};
+      const freshStatus = String(freshTicket.ticketStatus || '').toUpperCase();
+      if (freshStatus === 'USED' || freshTicket.scannedAt || freshTicket.usedAt) {
+        throw new Error('Ticket has already been scanned.');
+      }
+
+      const counterData = counterSnap.exists() ? (counterSnap.data() || {}) : {};
+      const currentBooked = Math.max(0, Number(counterData.booked || 0));
+      const newBooked = Math.max(0, currentBooked - 1);
+
+      transaction.update(ticketRef, {
+        ticketStatus: 'USED',
+        scannedAt: serverTimestamp(),
+        usedAt: serverTimestamp(),
+        usedBy: staffUser.email
+      });
+
+      transaction.set(counterRef, {
+        total: SEATS_PER_ZONE,
+        booked: newBooked,
+        available: Math.min(SEATS_PER_ZONE, SEATS_PER_ZONE - newBooked),
+        date: bookingDate,
+        time: normalizeBookingTime(bookingTime),
+        zone: normalizeZone(zone),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
     });
 
     return {
       valid: false,
       used: true,
-      reason: 'Ticket scanned successfully',
+      reason: 'Ticket scanned successfully — 1 seat released',
       sessionEnd
     };
   }
