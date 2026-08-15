@@ -68,6 +68,7 @@
     where,
     orderBy,
     updateDoc,
+    deleteDoc,
     doc,
     getDoc,
     runTransaction,
@@ -2715,7 +2716,10 @@
 
       const cleanup = await cleanupOldTickets();
       if (cleanup.error) {
-        result.textContent = 'Scanner ready. Automatic cleanup could not complete.';
+        console.error('Automatic ticket cleanup failed:', cleanup.error);
+        result.className = 'scan-error';
+        result.textContent =
+          'Cleanup failed: ' + (cleanup.error?.message || 'Check Firestore permissions.');
       } else {
         result.textContent =
           cleanup.deleted
@@ -3465,59 +3469,81 @@
   // Cleanup runs when staff opens the scanner and before each scan.
   // No Cloud Functions or paid Firebase plan is required.
 
-  const EXPIRED_RETENTION_MS = 2 * 60 * 60 * 1000; // 2 hours
+  // Cleanup is intentionally STAFF-SCANNER-ONLY.
+  // Used tickets are removed as soon as the scanner is opened.
+  // Unused tickets are removed once their session has ended.
 
   function parseTimePart(timeText) {
     if (!timeText) return null;
-
     const match = String(timeText).trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
     if (!match) return null;
-
     let hour = Number(match[1]);
     const minute = Number(match[2] || 0);
     const meridiem = match[3].toUpperCase();
-
     if (hour === 12) hour = 0;
     if (meridiem === 'PM') hour += 12;
-
     if (hour > 23 || minute > 59) return null;
     return { hour, minute };
+  }
+
+  function getSessionStartDate(ticket) {
+    if (!ticket) return null;
+    const dateValue = ticket.bookingDate || ticket.date;
+    if (!dateValue) return null;
+
+    // Prefer the explicit startTime written to every new ticket.
+    const startText = ticket.startTime || (() => {
+      const parts = String(ticket.time || '').split(/\s*[–-]\s*/);
+      return parts[0] || '';
+    })();
+    const start = parseTimePart(startText);
+    if (!start) return null;
+
+    const result = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(result.getTime())) return null;
+    result.setHours(start.hour, start.minute, 0, 0);
+    return result;
   }
 
   function getSessionEndDate(ticket) {
     if (!ticket) return null;
 
+    // New tickets already contain the exact expiry timestamp.
     if (ticket.expiresAt) {
-      const explicit = new Date(ticket.expiresAt);
+      const explicit = ticket.expiresAt?.toDate
+        ? ticket.expiresAt.toDate()
+        : new Date(ticket.expiresAt);
       if (!Number.isNaN(explicit.getTime())) return explicit;
     }
 
-    const dateValue = ticket.bookingDate || ticket.date || ticket.bookingDate;
+    const dateValue = ticket.bookingDate || ticket.date;
     if (!dateValue) return null;
 
-    const range = String(ticket.time || '');
-    const parts = range.split(/\s*[–-]\s*/);
-    const startText = parts.length > 1 ? parts[0].trim() : String(ticket.startTime || '');
-    const endText = parts.length > 1 ? parts[parts.length - 1].trim() : String(ticket.endTime || '');
+    const rangeParts = String(ticket.time || '').split(/\s*[–-]\s*/);
+    const startText = ticket.startTime || rangeParts[0] || '';
+    let endText = rangeParts.length > 1 ? rangeParts[rangeParts.length - 1] : '';
+    let start = parseTimePart(startText);
+    let end = parseTimePart(endText);
 
-    const start = parseTimePart(startText);
-    const end = parseTimePart(endText);
+    // Older tickets may contain only a start time + durationHours.
+    if (!end && start && Number(ticket.durationHours) > 0) {
+      const totalMinutes = start.hour * 60 + start.minute + Number(ticket.durationHours) * 60;
+      end = {
+        hour: Math.floor((totalMinutes % 1440) / 60),
+        minute: totalMinutes % 60
+      };
+    }
+
     if (!end) return null;
 
     const result = new Date(`${dateValue}T00:00:00`);
     if (Number.isNaN(result.getTime())) return null;
-
     result.setHours(end.hour, end.minute, 0, 0);
 
-    // Any session whose end clock time is earlier than its start clock time
-    // crosses midnight. This correctly handles Night Owl 11 PM–6 AM.
-    if (
-      start &&
-      (
-        end.hour < start.hour ||
-        (end.hour === start.hour && end.minute < start.minute)
-      )
-    ) {
+    if (start && (
+      end.hour < start.hour ||
+      (end.hour === start.hour && end.minute < start.minute)
+    )) {
       result.setDate(result.getDate() + 1);
     }
 
@@ -3528,45 +3554,20 @@
     return getSessionEndDate(ticket);
   }
 
-  function getSessionStartDate(ticket) {
-    if (!ticket) return null;
-
-    const dateValue = ticket.bookingDate || ticket.date;
-    if (!dateValue) return null;
-
-    const range = String(ticket.time || '');
-    const parts = range.split(/\s*[–-]\s*/);
-    const startText = parts.length > 1 ? parts[0].trim() : String(ticket.startTime || '');
-    const start = parseTimePart(startText);
-    if (!start) return null;
-
-    const result = new Date(`${dateValue}T00:00:00`);
-    if (Number.isNaN(result.getTime())) return null;
-    result.setHours(start.hour, start.minute, 0, 0);
-    return result;
-  }
-
   function getTicketValidity(ticket) {
-    if (!ticket) {
-      return { valid: false, reason: 'Ticket not found' };
-    }
+    if (!ticket) return { valid: false, reason: 'Ticket not found' };
 
     if (
       String(ticket.ticketStatus || '').toUpperCase() === 'USED' ||
-      ticket.scannedAt ||
-      ticket.usedAt
+      ticket.scannedAt || ticket.usedAt
     ) {
       return { valid: false, reason: 'Ticket already scanned' };
     }
 
     const start = getSessionStartDate(ticket);
     const expiry = getSessionEndDate(ticket);
-
-    // Staff may scan a ticket up to 30 minutes before its selected session starts.
-    // Example: a 7:00 PM ticket can be scanned from 6:30 PM onward.
-    // This window is calculated from the ticket's own session time, not from
-    // the time the staff member opens the scanner.
     const EARLY_SCAN_MS = 30 * 60 * 1000;
+
     if (start && Date.now() < start.getTime() - EARLY_SCAN_MS) {
       return {
         valid: false,
@@ -3577,13 +3578,7 @@
       };
     }
 
-    // If there is no usable session end, do NOT incorrectly mark a new ticket
-    // as expired. It remains valid until staff can verify the session.
-    if (!expiry) {
-      return { valid: true, reason: 'Ticket valid', expiry: null, start };
-    }
-
-    if (expiry.getTime() <= Date.now()) {
+    if (expiry && expiry.getTime() <= Date.now()) {
       return { valid: false, reason: 'Ticket expired', expiry, start };
     }
 
@@ -3592,47 +3587,39 @@
 
   async function cleanupOldTickets() {
     try {
-      const {
-        auth, db, collection, getDocs, query, where, deleteDoc
-      } = await window.__forgeAuthReady;
+      const { auth, db, collection, getDocs, deleteDoc } =
+        await window.__forgeAuthReady;
 
       const staffUser = auth.currentUser;
-      if (!staffUser || !isStaffEmail(staffUser.email)) return { deleted: 0 };
+      if (!staffUser || !isStaffEmail(staffUser.email)) {
+        return { deleted: 0, error: new Error('Staff access required.') };
+      }
 
-      // Read tickets in batches using the fields the current free-plan rules
-      // already support. We inspect every ticket visible to staff and only
-      // delete tickets that meet the exact retention rules.
       const snapshot = await getDocs(collection(db, 'tickets'));
       const now = Date.now();
       const deletions = [];
 
       snapshot.docs.forEach(ticketDoc => {
-        const ticket = ticketDoc.data();
-
+        const ticket = ticketDoc.data() || {};
         const status = String(ticket.ticketStatus || '').toUpperCase();
         const sessionEnd = getSessionEndDate(ticket);
+        const isUsed = status === 'USED' || !!ticket.scannedAt || !!ticket.usedAt;
 
-        // USED: delete only after the chosen session has ended.
-        if (status === 'USED' || ticket.scannedAt || ticket.usedAt) {
+        // USED/scanned tickets are removed only after their session has ended.
+        if (isUsed) {
           if (sessionEnd && sessionEnd.getTime() <= now) {
             deletions.push(deleteDoc(ticketDoc.ref));
           }
           return;
         }
 
-        // UNUSED/EXPIRED: keep for 2 hours after actual session end.
-        if (sessionEnd) {
-          const deleteAfter = sessionEnd.getTime() + EXPIRED_RETENTION_MS;
-          if (deleteAfter <= now) {
-            deletions.push(deleteDoc(ticketDoc.ref));
-          }
+        // Unused tickets are removed once their actual session has ended.
+        if (sessionEnd && sessionEnd.getTime() <= now) {
+          deletions.push(deleteDoc(ticketDoc.ref));
         }
       });
 
-      if (deletions.length) {
-        await Promise.all(deletions);
-      }
-
+      if (deletions.length) await Promise.all(deletions);
       return { deleted: deletions.length };
     } catch (err) {
       console.error('Ticket cleanup failed:', err);
