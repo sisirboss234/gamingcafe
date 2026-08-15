@@ -39,6 +39,8 @@
     deleteDoc,
     doc,
     getDoc,
+    runTransaction,
+    onSnapshot,
     serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -69,6 +71,8 @@
     updateDoc,
     doc,
     getDoc,
+    runTransaction,
+    onSnapshot,
     serverTimestamp,
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -1367,22 +1371,46 @@
 
 <style>
   .seat-availability {
-    margin: 10px 0;
-    padding: 10px 12px;
-    border-radius: 8px;
-    border: 1px solid #d1d5db;
+    margin: 12px 0;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(0,242,254,.35);
+    background: linear-gradient(135deg, rgba(0,242,254,.07), rgba(0,179,134,.05));
     font-size: 14px;
+    box-shadow: 0 0 18px rgba(0,242,254,.08);
   }
   .seat-availability strong,
   .seat-availability span {
     display: block;
   }
+  .seat-availability strong {
+    color: var(--cyan);
+    font-size: 15px;
+    letter-spacing: .02em;
+  }
   .seat-availability span {
-    margin-top: 3px;
-    opacity: .8;
+    margin-top: 6px;
+    color: var(--bone-dim);
+  }
+  .seat-availability .seat-count-line {
+    margin-top: 9px;
+    color: var(--bone);
+    font-weight: 700;
   }
   .seat-availability.sold-out {
-    opacity: .75;
+    border-color: rgba(255,77,109,.65);
+    background: rgba(255,77,109,.07);
+  }
+  .seat-availability.sold-out strong { color: #ff6b81; }
+
+  .early-entry-popup {
+    border-color: #00f2fe !important;
+    border-left-color: #00f2fe !important;
+    box-shadow: 0 20px 70px rgba(0,0,0,.7), 0 0 45px rgba(0,242,254,.25) !important;
+  }
+  .early-entry-popup .booking-popup-icon {
+    background: linear-gradient(135deg,#00f2fe,#00b386) !important;
+    box-shadow: 0 0 22px rgba(0,242,254,.4) !important;
   }
 </style>
 
@@ -1775,12 +1803,6 @@
             <div class="checkout-field" style="margin-top:16px;">
               <label for="zoneSelect">Choose Gaming Zone</label>
               <select id="zoneSelect" required></select>
-<div id="availableSeatsDisplay" role="status" aria-live="polite"
-  style="margin:12px 0;padding:12px 15px;border-radius:10px;
-  background:linear-gradient(135deg,#062f3a,#172554);
-  border:2px solid #00d9ff;color:#fff;font-weight:800;
-  box-shadow:0 5px 18px rgba(0,217,255,.18);">🪑 <strong>Select date, session and zone to see available seats</strong></div>
-
               <small id="zoneHint" style="display:block;margin-top:7px;color:var(--bone-dim);font-size:11px;"></small>
             </div>
 
@@ -2066,33 +2088,101 @@
     }
   }
 
+  function isTodayDate(dateValue) {
+    if (!dateValue) return false;
+    const now = new Date();
+    const todayValue = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    return String(dateValue) === todayValue;
+  }
+
+  function isSessionStartInPast(dateValue, startTime) {
+    if (!isTodayDate(dateValue) || !startTime) return false;
+    const parts = String(startTime).split(':');
+    const startHour = Number(parts[0]);
+    const startMinute = Number(parts[1] || 0);
+    if (!Number.isFinite(startHour) || !Number.isFinite(startMinute)) return false;
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    return startHour * 60 + startMinute < currentMinutes;
+  }
+
+  function formatTimeLabel(timeValue) {
+    const parts = String(timeValue || '').split(':');
+    const hour24 = Number(parts[0]);
+    const minute = Number(parts[1] || 0);
+    if (!Number.isFinite(hour24)) return String(timeValue || '');
+    const suffix = hour24 >= 12 ? 'PM' : 'AM';
+    const hour12 = hour24 % 12 || 12;
+    return `${hour12}:${String(minute).padStart(2,'0')} ${suffix}`;
+  }
+
   function buildTimeOptions() {
     const timeSelect = document.getElementById('passTimeInput');
     timeSelect.innerHTML = '<option value="">Choose session time</option>';
-
     if (!currentSelectedPlan) return;
+    const selectedDate = document.getElementById('passDateInput')?.value || '';
+    let availableTimeCount = 0;
 
     if (currentSelectedPlan.isNightOwl) {
       const option = document.createElement('option');
       option.value = '23:00';
-      option.textContent = '11:00 PM – 6:00 AM';
+      if (isSessionStartInPast(selectedDate, '23:00')) {
+        option.disabled = true;
+        option.textContent = '11:00 PM – 6:00 AM — Unavailable (time passed)';
+      } else {
+        option.textContent = '11:00 PM – 6:00 AM';
+        availableTimeCount++;
+      }
       timeSelect.appendChild(option);
-      return;
+    } else {
+      const duration = currentSelectedPlan.durationHours || 2;
+      const latestStart = 22 - duration;
+      for (let h = 9; h <= latestStart; h++) {
+        const startTime = `${String(h).padStart(2,'0')}:00`;
+        const endH = h + duration;
+        const option = document.createElement('option');
+        option.value = startTime;
+        if (isSessionStartInPast(selectedDate, startTime)) {
+          option.disabled = true;
+          option.textContent = `${formatHour(h)} – ${formatHour(endH)} — Unavailable (time passed)`;
+        } else {
+          option.textContent = `${formatHour(h)} – ${formatHour(endH)}`;
+          availableTimeCount++;
+        }
+        timeSelect.appendChild(option);
+      }
     }
 
-    const duration = currentSelectedPlan.durationHours || 2;
-    // The venue operating window is 9 AM–10 PM.
-    // Start times are limited so the full pass finishes by 10 PM.
-    const latestStart = 22 - duration;
-
-    for (let h = 9; h <= latestStart; h++) {
-      const endH = h + duration;
-      const option = document.createElement('option');
-      option.value = `${String(h).padStart(2,'0')}:00`;
-      option.textContent = `${formatHour(h)} – ${formatHour(endH)}`;
-      timeSelect.appendChild(option);
+    if (isTodayDate(selectedDate) && availableTimeCount === 0) {
+      const info = document.createElement('option');
+      info.disabled = true;
+      info.textContent = '⏰ No sessions remaining today — choose another date';
+      timeSelect.appendChild(info);
     }
   }
+
+  function validateBookingTimeBeforePurchase(chosenDate, chosenTime) {
+    if (!isSessionStartInPast(chosenDate, chosenTime)) return true;
+    const currentTime = new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+    showBookingPopup(`⏰ You cannot book ${formatTimeLabel(chosenTime)} because that session has already passed today. The current time is ${currentTime}. Please choose a later session or another date.`, '⏰ Session time has passed');
+    return false;
+  }
+
+  // Rebuild times when the customer changes the date so past sessions today are unavailable.
+  document.addEventListener('change', (event) => {
+    if (event.target?.id === 'passDateInput') {
+      const timeSelect = document.getElementById('passTimeInput');
+      buildTimeOptions();
+      if (timeSelect) timeSelect.value = '';
+      refreshSeatAvailability();
+    } else if (event.target?.id === 'passTimeInput' || event.target?.id === 'zoneSelect') {
+      refreshSeatAvailability();
+    }
+  });
+
+  document.addEventListener('input', (event) => {
+    if (event.target?.id === 'ticketQuantity') refreshSeatAvailability();
+  });
 
   function selectPassPlan(planName, price, durationHours, isNightOwl) {
     // New checkout = new payment identity.
@@ -2128,6 +2218,14 @@
 
       buildDateOptions();
       buildTimeOptions();
+      const initialAvailability = document.getElementById('seatAvailability') || document.getElementById('availableSeats');
+      if (initialAvailability) {
+        initialAvailability.innerHTML = `
+          <div class="seat-availability waiting">
+            <strong>🎟️ Check Live Seat Availability</strong>
+            <span>✨ Please select your <b>date, session time and gaming zone</b> above to see booked and remaining seats.</span>
+          </div>`;
+      }
 
       // Standard Pass is locked to Zone A. Other passes keep all zones available.
       const zoneSelect = document.getElementById('zoneSelect');
@@ -2161,6 +2259,8 @@
       resetCheckoutForNewPurchase();
       initializePaymentMethod();
       switchView('checkout');
+      // Load live capacity for the newly selected date/session/zone.
+      setTimeout(() => refreshSeatAvailability(), 0);
     });
   }
 
@@ -2242,6 +2342,11 @@
     return;
   }
 
+  // HARD CHECK: a customer cannot purchase a session whose start time has already passed today.
+  if (!validateBookingTimeBeforePurchase(chosenDate, chosenTime)) return;
+
+  // The displayed count is live, but the Firestore transaction below is the
+  // authoritative final check when several users book simultaneously.
   const payButton = document.getElementById('payButton');
   const originalButtonText =
     payButton?.dataset.originalText ||
@@ -2294,8 +2399,11 @@
         fullName: gamerName,
         planName: currentSelectedPlan.name,
         amount: Number(currentSelectedPlan.price || 0),
-        quantity,
+        // One Firestore document = one seat and one QR ticket.
+        // The purchase quantity is still used for the checkout total.
+        quantity: 1,
         ticketIndex: i + 1,
+        purchaseQuantity: quantity,
         date: chosenDate,
         time: timeRange,
         startTime: chosenTime,
@@ -2351,32 +2459,17 @@
       });
     }
 
-    // Check the selected zone/session capacity before creating tickets.
-    const selectedBookingDate = chosenDate;
-    const selectedSession = timeRange;
-    const selectedZoneForCapacity =
-      typeof selectedZone !== 'undefined' ? selectedZone :
-      (typeof zone !== 'undefined' ? zone : '');
-
-    if (selectedZoneForCapacity) {
-      const availableSeatsBeforePurchase = await getAvailableSeatsForSelection({
-        bookingDate: selectedBookingDate,
-        time: selectedSession,
-        zone: selectedZoneForCapacity
-      });
-
-      if (availableSeatsBeforePurchase < quantity) {
-        throw new Error(
-          `Only ${availableSeatsBeforePurchase} seat${availableSeatsBeforePurchase === 1 ? '' : 's'} remaining in this zone for this session.`
-        );
-      }
-    }
-
     // Every ticket gets its own unique token. Use addDoc for every ticket so
     // ticket generation does not depend on the optional writeBatch/doc bridge.
-    await Promise.all(
-      tickets.map(ticket => addDoc(collection(db, 'tickets'), ticket))
-    );
+    // Atomic seat reservation + ticket creation. This is what prevents two
+    // users from buying the same remaining seats at the same time.
+    await reserveSeatsAndCreateTickets({
+      bookingDate: chosenDate,
+      startTime: chosenTime,
+      zone: chosenZone,
+      quantity,
+      tickets
+    });
 
     // Clear the checkout state after successful payment so a second click
     // cannot regenerate the same purchase.
@@ -2423,7 +2516,8 @@
       payButton.textContent = 'Confirm Demo Payment — Generate Ticket';
     }
 
-    alert('Ticket could not be generated. Please try again.');
+    const msg = String(err?.message || 'Ticket could not be generated. Please try again.');
+    showBookingPopup(`⚠️ ${msg}`, 'Booking could not be completed');
   }
 }
 
@@ -2700,11 +2794,23 @@
         const validity = getTicketValidity(ticket);
 
         if (!validity.valid) {
-          result.className = 'scan-error';
-          result.innerHTML = `
-            <strong>❌ ${validity.reason === 'Ticket already scanned' ? 'ALREADY USED' : 'EXPIRED'}</strong><br>
-            ${validity.expiry ? `Session ended: ${validity.expiry.toLocaleString()}` : ''}
-          `;
+          if (validity.reason === 'Session not started') {
+            result.className = 'scan-error';
+            result.innerHTML = `
+              <div class="early-entry-popup" style="padding:18px;border:1px solid #00f2fe;border-radius:12px;background:rgba(0,242,254,.06);">
+                <strong style="font-size:20px;color:#00f2fe;">⏳ NOT YET — SESSION HASN'T STARTED</strong><br><br>
+                <span style="color:#fff;">This ticket is valid, but entry opens at:</span><br>
+                <strong style="font-size:18px;color:#00ffcc;">${validity.start ? validity.start.toLocaleString() : 'the selected session time'}</strong><br><br>
+                <span style="color:#cfd5df;">Please ask the customer to wait until the session begins.</span>
+              </div>
+            `;
+          } else {
+            result.className = 'scan-error';
+            result.innerHTML = `
+              <strong>❌ ${validity.reason === 'Ticket already scanned' ? 'ALREADY USED' : 'EXPIRED'}</strong><br>
+              ${validity.expiry ? `Session ended: ${validity.expiry.toLocaleString()}` : ''}
+            `;
+          }
           return;
         }
 
@@ -2847,8 +2953,18 @@
       errBox.classList.remove('is-visible');
 
       try {
+        const cleanName = String(name || '').trim();
         const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        await updateProfile(cred.user, { displayName: name });
+
+        // Save the exact name chosen during account creation to Firebase Auth.
+        // This makes the same name appear after login from another device/browser.
+        await updateProfile(cred.user, { displayName: cleanName });
+
+        // onAuthStateChanged can fire before updateProfile finishes, so update the
+        // visible greeting immediately as well.
+        const memberName = document.getElementById('navMemberName');
+        if (memberName) memberName.textContent = 'Hi, ' + cleanName;
+
         await sendEmailVerification(cred.user);
         modal.classList.remove('is-open');
         alert('Account created! Please check your email for verification.');
@@ -2882,7 +2998,7 @@
     });
 
     // Auth State Observer
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       const loggedOutNav = document.getElementById('navRightLoggedOut');
       const loggedInNav = document.getElementById('navRightLoggedIn');
       const memberName = document.getElementById('navMemberName');
@@ -2892,9 +3008,15 @@
       const navStaffLink = document.getElementById('navStaffLink');
 
       if (user) {
+        // Reload the Auth profile so the latest displayName selected at signup is used.
+        try { await user.reload(); } catch (reloadError) { console.warn('Could not reload user profile:', reloadError); }
+        const currentUser = auth.currentUser || user;
+        const displayName = String(currentUser.displayName || '').trim();
+        const emailFallback = String(currentUser.email || '').split('@')[0];
+
         if (loggedOutNav) loggedOutNav.style.display = 'none';
         if (loggedInNav) loggedInNav.style.display = 'flex';
-        if (memberName) memberName.textContent = 'Hi, ' + (user.displayName || user.email.split('@')[0]);
+        if (memberName) memberName.textContent = 'Hi, ' + (displayName || emailFallback || 'Gamer');
         if (navMyTicketsLink) navMyTicketsLink.style.display = 'inline-block';
         if (navStaffLink) navStaffLink.style.display = isStaffEmail(user.email) ? 'inline-block' : 'none';
 
@@ -3060,29 +3182,44 @@
       return false;
     }
 
-    if (available <= 0) {
-      showSeatsFullNotification(zone);
-      return false;
-    }
-
     return true;
   }
 
   // ---------- Seat availability ----------
   // Each zone has 10 seats for each selected travel date/session.
-  function showSeatsFullNotification(zone) {
-  showBookingPopup(
-    `🚫 ${zone || 'This zone'} is fully booked. All 10 seats are already reserved for the selected date and session. Please choose another zone, date, or session.`,
-    'Seats Full'
-  );
-}
+  const SEATS_PER_ZONE = 10;
 
-const SEATS_PER_ZONE = 10;
+  // Normalize session values so old and new ticket formats count together.
+  // New tickets store startTime (e.g. 19:00); older tickets may only store
+  // time as a range (e.g. 7:00 PM – 9:00 PM).
+  function normalizeBookingTime(value) {
+    if (!value) return '';
+    const raw = String(value).trim();
+    const start = raw.split(/\s*[–-]\s*/)[0].trim();
+    const m24 = start.match(/^(\d{1,2}):(\d{2})$/);
+    if (m24) return `${String(Number(m24[1])).padStart(2,'0')}:${m24[2]}`;
+    const m12 = start.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (m12) {
+      let h = Number(m12[1]);
+      const min = m12[2] || '00';
+      const ap = m12[3].toUpperCase();
+      if (ap === 'AM' && h === 12) h = 0;
+      if (ap === 'PM' && h !== 12) h += 12;
+      return `${String(h).padStart(2,'0')}:${min}`;
+    }
+    return raw;
+  }
+
+  function normalizeZone(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+  }
 
   function getSeatKey(data) {
-    const date = data?.bookingDate || data?.date || '';
-    const session = data?.time || data?.session || data?.sessionName || '';
-    const zone = data?.zone || data?.selectedZone || '';
+    const date = String(data?.bookingDate || data?.date || '').trim();
+    const session = normalizeBookingTime(
+      data?.startTime || data?.time || data?.session || data?.sessionName || ''
+    );
+    const zone = normalizeZone(data?.zone || data?.selectedZone || '');
     return `${date}__${session}__${zone}`;
   }
 
@@ -3094,124 +3231,189 @@ const SEATS_PER_ZONE = 10;
   function getReservedSeatCount(ticket) {
     const status = String(ticket?.ticketStatus || '').toUpperCase();
 
-    // Active, paid tickets reserve seats. Used tickets still reserve seats until
-    // their session ends, after which the cleanup system removes them.
+    // Every generated Firestore ticket document represents ONE seat/QR.
+    // The old code stored the whole purchase quantity on every ticket document,
+    // so buying 5 seats could incorrectly reserve 25 seats.
     if (ticket?.paymentStatus && String(ticket.paymentStatus).toUpperCase() !== 'PAID') {
       return 0;
     }
     if (status === 'CANCELLED' || status === 'REFUNDED') return 0;
 
-    return getTicketQuantity(ticket);
+    return 1;
   }
 
   async function getAvailableSeatsForSelection({ bookingDate, time, zone }) {
-    const {
-      db, collection, getDocs
-    } = await window.__forgeAuthReady;
+    const { db, collection, getDocs, doc, getDoc } = await window.__forgeAuthReady;
+    const key = `${String(bookingDate).trim()}__${normalizeBookingTime(time)}__${normalizeZone(zone)}`;
+    const counterRef = doc(db, 'seatCounters', key);
+    const counterSnap = await getDoc(counterRef);
 
+    if (counterSnap.exists()) {
+      const data = counterSnap.data();
+      return Math.max(0, Number(data.total || SEATS_PER_ZONE) - Number(data.booked || 0));
+    }
+
+    // First-time migration: include existing paid tickets before the counter exists.
     const snapshot = await getDocs(collection(db, 'tickets'));
-    const key = `${bookingDate}__${time}__${zone}`;
-    let reserved = 0;
-
+    let booked = 0;
     snapshot.docs.forEach(ticketDoc => {
       const ticket = ticketDoc.data();
-      if (getSeatKey(ticket) === key) {
-        reserved += getReservedSeatCount(ticket);
-      }
+      if (getSeatKey(ticket) === key) booked += getReservedSeatCount(ticket);
     });
+    return Math.max(0, SEATS_PER_ZONE - booked);
+  }
 
-    return Math.max(0, SEATS_PER_ZONE - reserved);
+  async function reserveSeatsAndCreateTickets({ bookingDate, startTime, zone, quantity, tickets }) {
+    const { db, collection, doc, query, where, runTransaction, serverTimestamp } = await window.__forgeAuthReady;
+    const key = `${String(bookingDate).trim()}__${normalizeBookingTime(startTime)}__${normalizeZone(zone)}`;
+    const counterRef = doc(db, 'seatCounters', key);
+    const ticketRefs = tickets.map(() => doc(collection(db, 'tickets')));
+
+    await runTransaction(db, async (transaction) => {
+      const counterSnap = await transaction.get(counterRef);
+      let booked = 0;
+
+      if (counterSnap.exists()) {
+        booked = Number(counterSnap.data().booked || 0);
+      } else {
+        // Initialize the counter from existing ticket documents exactly once.
+        const existing = await transaction.get(query(collection(db, 'tickets'), where('bookingDate', '==', String(bookingDate).trim())));
+        existing.docs.forEach(ticketDoc => {
+          const ticket = ticketDoc.data();
+          if (getSeatKey(ticket) === key) booked += getReservedSeatCount(ticket);
+        });
+      }
+
+      const available = Math.max(0, SEATS_PER_ZONE - booked);
+      if (available < quantity) {
+        throw new Error(`Only ${available} seat${available === 1 ? '' : 's'} remaining for this date, session and zone.`);
+      }
+
+      transaction.set(counterRef, {
+        total: SEATS_PER_ZONE,
+        booked: booked + quantity,
+        date: String(bookingDate).trim(),
+        startTime: normalizeBookingTime(startTime),
+        zone: normalizeZone(zone),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      tickets.forEach((ticket, index) => {
+        transaction.set(ticketRefs[index], ticket);
+      });
+    });
+  }
+
+  let seatAvailabilityUnsubscribe = null;
+
+  async function subscribeSeatAvailability({ bookingDate, time, zone, quantity = 1 }) {
+    const availabilityEl = document.getElementById('seatAvailability') || document.getElementById('availableSeats');
+    if (!availabilityEl || !bookingDate || !time || !zone) return;
+
+    if (seatAvailabilityUnsubscribe) {
+      seatAvailabilityUnsubscribe();
+      seatAvailabilityUnsubscribe = null;
+    }
+
+    const { db, doc, onSnapshot } = await window.__forgeAuthReady;
+    const key = `${String(bookingDate).trim()}__${normalizeBookingTime(time)}__${normalizeZone(zone)}`;
+    const counterRef = doc(db, 'seatCounters', key);
+
+    seatAvailabilityUnsubscribe = onSnapshot(counterRef, async snap => {
+      const available = snap.exists()
+        ? Math.max(0, Number(snap.data().total || SEATS_PER_ZONE) - Number(snap.data().booked || 0))
+        : await getAvailableSeatsForSelection({ bookingDate, time, zone });
+      renderSeatAvailability(availabilityEl, available, quantity);
+    }, err => console.error('Live seat availability listener failed:', err));
+
+    const initial = await getAvailableSeatsForSelection({ bookingDate, time, zone });
+    renderSeatAvailability(availabilityEl, initial, quantity);
   }
 
   function renderSeatAvailability(container, available, quantity = 1) {
     if (!container) return;
 
+    const sold = Math.max(0, SEATS_PER_ZONE - available);
     const canBuy = available >= quantity;
     container.innerHTML = `
       <div class="seat-availability ${canBuy ? 'available' : 'sold-out'}">
-        <strong>${available > 0 ? `${available} seat${available === 1 ? '' : 's'} available` : 'Sold out'}</strong>
+        <strong>${available > 0 ? '🎮 Seat Availability' : '🚫 Fully Booked'}</strong>
+        <span class="seat-count-line">📌 ${sold} booked · 🪑 ${available} remaining · ${SEATS_PER_ZONE} total</span>
         <span>${canBuy
-          ? `10 total seats · ${quantity} selected`
-          : 'Please choose another zone, date, or session.'}</span>
+          ? `✨ ${quantity} seat${quantity === 1 ? '' : 's'} selected — ${available - quantity} will remain after this booking`
+          : '⚠️ Please reduce your selection or choose another session.'}</span>
       </div>
     `;
   }
 
   async function refreshSeatAvailability() {
-  try {
-    const bookingDate =
-      document.getElementById('passDateInput')?.value ||
-      document.getElementById('date')?.value ||
-      document.getElementById('bookingDate')?.value || '';
+    try {
+      // Read the real checkout controls. This is the key fix that makes
+      // availability appear after date/time/zone are selected.
+      const bookingDate =
+        document.getElementById('passDateInput')?.value ||
+        document.getElementById('date')?.value ||
+        document.getElementById('bookingDate')?.value ||
+        window.chosenDate || '';
 
-    const time =
-      document.getElementById('passTimeInput')?.value ||
-      document.getElementById('time')?.value ||
-      document.getElementById('session')?.value || '';
+      const time =
+        document.getElementById('passTimeInput')?.value ||
+        document.getElementById('time')?.value ||
+        document.getElementById('session')?.value ||
+        window.chosenTime || '';
 
-    const zone =
-      document.getElementById('zoneSelect')?.value ||
-      document.getElementById('zone')?.value ||
-      document.getElementById('ticketZone')?.value || '';
+      const zone =
+        document.getElementById('zoneSelect')?.value ||
+        document.getElementById('zone')?.value ||
+        document.getElementById('ticketZone')?.value ||
+        window.selectedZone || '';
 
-    const quantityEl =
-      document.getElementById('ticketQuantity') ||
-      document.getElementById('quantity') ||
-      document.getElementById('people');
+      const quantityEl =
+        document.getElementById('quantity') ||
+        document.getElementById('people') ||
+        document.getElementById('ticketQuantity');
 
-    const quantity = Math.max(1, Number(quantityEl?.value || 1));
-    const display = document.getElementById('availableSeatsDisplay');
-    const detail = document.getElementById('seatAvailability');
+      const quantity = Number(quantityEl?.value || 1);
 
-    if (!bookingDate || !time || !zone) {
-      if (display) {
-        display.innerHTML = '🪑 <strong>Select date, session and zone to see available seats</strong>';
-        display.style.background = 'linear-gradient(135deg,#172554,#312e81)';
-        display.style.borderColor = '#818cf8';
+      const availabilityEl =
+        document.getElementById('seatAvailability') ||
+        document.getElementById('availableSeats');
+
+      if (!availabilityEl) return;
+
+      if (!bookingDate || !time || !zone) {
+        availabilityEl.innerHTML = `
+          <div class="seat-availability waiting">
+            <strong>🎟️ Check Live Seat Availability</strong>
+            <span>✨ Please select your <b>date, session time and gaming zone</b> above to see how many seats are booked and how many are remaining.</span>
+          </div>`;
+        return;
       }
-      if (detail) detail.innerHTML = '';
-      return;
-    }
 
-    const available = await getAvailableSeatsForSelection({ bookingDate, time, zone });
+      const available = await getAvailableSeatsForSelection({
+        bookingDate,
+        time,
+        zone
+      });
 
-    if (detail) renderSeatAvailability(detail, available, quantity);
+      renderSeatAvailability(availabilityEl, available, quantity);
 
-    if (display) {
-      if (available === 0) {
-        display.innerHTML = `🚫 <strong>FULLY BOOKED — 0 / 10 seats available</strong><br>
-          <span>${zone} · ${time} · ${bookingDate}</span>`;
-        display.style.background = 'linear-gradient(135deg,#450a0a,#7f1d1d)';
-        display.style.borderColor = '#ff4d6d';
-      } else if (available <= 3) {
-        display.innerHTML = `⚠️ <strong>Only ${available} / 10 seats left</strong><br>
-          <span>${zone} · ${time} · ${bookingDate}</span>`;
-        display.style.background = 'linear-gradient(135deg,#451a03,#78350f)';
-        display.style.borderColor = '#f59e0b';
-      } else {
-        display.innerHTML = `🪑 <strong>${available} / 10 seats available</strong><br>
-          <span>${zone} · ${time} · ${bookingDate}</span>`;
-        display.style.background = 'linear-gradient(135deg,#063b45,#172554)';
-        display.style.borderColor = '#00d9ff';
+      if (quantityEl) {
+        quantityEl.setAttribute('max', String(Math.max(1, available)));
+        quantityEl.disabled = available === 0;
+        if (available === 0) quantityEl.value = '1';
       }
-    }
 
-    if (quantityEl) {
-      quantityEl.max = String(available);
-      if (available > 0 && Number(quantityEl.value) > available) {
-        quantityEl.value = String(available);
+      if (quantityEl) {
+        quantityEl.max = String(available);
+        if (Number(quantityEl.value) > available) {
+          quantityEl.value = String(Math.max(1, available));
+        }
       }
-    }
-  } catch (err) {
-    console.error('Seat availability check failed:', err);
-    const display = document.getElementById('availableSeatsDisplay');
-    if (display) {
-      display.innerHTML = '⚠️ <strong>Unable to check available seats. Please try again.</strong>';
-      display.style.background = '#3b1020';
-      display.style.borderColor = '#ff4d6d';
+    } catch (err) {
+      console.error('Seat availability check failed:', err);
     }
   }
-}
 
   // ---------- Ticket validity / free-plan cleanup ----------
 
@@ -3310,6 +3512,24 @@ const SEATS_PER_ZONE = 10;
     return getSessionEndDate(ticket);
   }
 
+  function getSessionStartDate(ticket) {
+    if (!ticket) return null;
+
+    const dateValue = ticket.bookingDate || ticket.date;
+    if (!dateValue) return null;
+
+    const range = String(ticket.time || '');
+    const parts = range.split(/\s*[–-]\s*/);
+    const startText = parts.length > 1 ? parts[0].trim() : String(ticket.startTime || '');
+    const start = parseTimePart(startText);
+    if (!start) return null;
+
+    const result = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(result.getTime())) return null;
+    result.setHours(start.hour, start.minute, 0, 0);
+    return result;
+  }
+
   function getTicketValidity(ticket) {
     if (!ticket) {
       return { valid: false, reason: 'Ticket not found' };
@@ -3323,19 +3543,26 @@ const SEATS_PER_ZONE = 10;
       return { valid: false, reason: 'Ticket already scanned' };
     }
 
+    const start = getSessionStartDate(ticket);
     const expiry = getSessionEndDate(ticket);
+
+    // Do not allow a ticket to be scanned/used before its selected session starts.
+    // Future bookings remain purchasable; entry is simply locked until the start time.
+    if (start && start.getTime() > Date.now()) {
+      return { valid: false, reason: 'Session not started', start, expiry };
+    }
 
     // If there is no usable session end, do NOT incorrectly mark a new ticket
     // as expired. It remains valid until staff can verify the session.
     if (!expiry) {
-      return { valid: true, reason: 'Ticket valid', expiry: null };
+      return { valid: true, reason: 'Ticket valid', expiry: null, start };
     }
 
     if (expiry.getTime() <= Date.now()) {
-      return { valid: false, reason: 'Ticket expired', expiry };
+      return { valid: false, reason: 'Ticket expired', expiry, start };
     }
 
-    return { valid: true, reason: 'Ticket valid', expiry };
+    return { valid: true, reason: 'Ticket valid', expiry, start };
   }
 
   async function cleanupOldTickets() {
@@ -3478,16 +3705,8 @@ PULSE TICKETING SETUP NOTES
 
 
 <script>
-
-document.addEventListener('change', (event) => {
-  const id = event.target?.id;
-  if (['date','bookingDate','time','session','zone','ticketZone','zoneSelect','quantity','people','ticketQuantity'].includes(id)) {
-    refreshAvailableSeatsDisplay();
-  }
-});
-
 document.addEventListener('DOMContentLoaded', () => {
-  const ids = ['date', 'bookingDate', 'passDateInput', 'time', 'session', 'passTimeInput', 'zone', 'ticketZone', 'zoneSelect', 'quantity', 'people', 'ticketQuantity'];
+  const ids = ['date', 'bookingDate', 'time', 'session', 'zone', 'ticketZone', 'quantity', 'people', 'ticketQuantity'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
@@ -3519,8 +3738,6 @@ document.addEventListener('click', async (event) => {
   }
 }, true);
 </script>
-<script>window.addEventListener('load', () => { refreshSeatAvailability(); });</script>
-
-</script>
 </body>
 </html>
+</script>
