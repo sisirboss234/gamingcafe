@@ -57,6 +57,11 @@
   const auth = getAuth(firebaseApp);
   const db = getFirestore(firebaseApp);
 
+  // Expose Firestore document-reference helper to the non-module app code.
+  // This avoids cross-script scope errors such as "__pulseDoc is not a function".
+  window.__pulseDoc = doc;
+  window.__forgeDoc = doc;
+
   window.__forgeAuthReady = Promise.resolve({
     auth,
     db,
@@ -2474,34 +2479,37 @@
       });
     }
 
-    // FINAL ATOMIC BOOKING:
-    // The browser display above is only informational. This Firestore transaction is
-    // the authoritative check, so simultaneous users cannot overbook the same
-    // date + session + zone. Ticket documents and the seat counter are committed
-    // together in one transaction.
-    const { doc, getDoc, runTransaction } = await window.__forgeAuthReady;
+    // FINAL ATOMIC BOOKING
+    // The seat counter is the authoritative shared lock for DATE + SESSION + ZONE.
+    // Existing active tickets are used only to seed a missing counter. Once the
+    // counter exists, Firestore transactions serialize simultaneous bookings.
+    const { doc, getDoc, getDocs, runTransaction } = await window.__forgeAuthReady;
     const counterRef = getSeatCounterRef(db, chosenDate, timeRange, chosenZone);
-    const ticketRefs = tickets.map(ticket => doc(db, 'tickets', ticket.token));
+    const ticketRefs = tickets.map(ticket => window.__pulseDoc(db, 'tickets', ticket.token));
 
-    // If this is an existing installation with old ticket documents, use the old
-    // ticket count only to seed a missing counter. Once the counter exists, all
-    // future bookings are controlled atomically by Firestore.
-    const legacyAvailable = liveAvailableSeats;
-    const legacyBooked = Math.max(0, SEATS_PER_ZONE - legacyAvailable);
-
-    await runTransaction(db, async (transaction) => {
-      // Active paid ticket documents are authoritative. Reading them inside the
-      // transaction also repairs any stale seatCounters document automatically.
-      const allTicketsSnap = await transaction.get(collection(db, 'tickets'));
-
+    // Seed value for an existing installation where the counter document does not
+    // exist yet. This read is intentionally outside the transaction; the transaction
+    // re-reads the counter and will retry if another user creates it first.
+    let seededBooked = Math.max(0, SEATS_PER_ZONE - Number(liveAvailableSeats || SEATS_PER_ZONE));
+    try {
+      const existingTicketsSnap = await getDocs(collection(db, 'tickets'));
       const key = `${String(chosenDate).trim()}__${normalizeBookingTime(timeRange)}__${normalizeZone(chosenZone)}`;
       let activeBooked = 0;
-      allTicketsSnap.docs.forEach(ticketDoc => {
+      existingTicketsSnap.docs.forEach(ticketDoc => {
         const ticket = ticketDoc.data() || {};
         if (getSeatKey(ticket) === key) activeBooked += getReservedSeatCount(ticket);
       });
+      seededBooked = Math.min(SEATS_PER_ZONE, Math.max(0, activeBooked));
+    } catch (seedError) {
+      console.warn('Could not seed seat counter from existing tickets; using displayed availability.', seedError);
+    }
 
-      const booked = Math.min(SEATS_PER_ZONE, Math.max(0, activeBooked));
+    await runTransaction(db, async (transaction) => {
+      const counterSnap = await transaction.get(counterRef);
+      const counterData = counterSnap.exists() ? (counterSnap.data() || {}) : {};
+      const booked = counterSnap.exists()
+        ? Math.min(SEATS_PER_ZONE, Math.max(0, Number(counterData.booked || 0)))
+        : seededBooked;
       const available = Math.max(0, SEATS_PER_ZONE - booked);
 
       if (available < quantity) {
@@ -2522,6 +2530,7 @@
         updatedAt: serverTimestamp()
       }, { merge: true });
 
+      // One Firestore document represents one physical seat/ticket.
       tickets.forEach((ticket, index) => {
         transaction.set(ticketRefs[index], ticket);
       });
@@ -3321,7 +3330,7 @@
     // Pass type is deliberately NOT part of this key.
     const key = `${String(bookingDate).trim()}__${normalizeBookingTime(time)}__${normalizeZone(zone)}`;
     const safeId = encodeURIComponent(key).replace(/%/g, '_');
-    return doc(db, 'seatCounters', safeId);
+    return window.__pulseDoc(db, 'seatCounters', safeId);
   }
 
   async function getAvailableSeatsForSelection({ bookingDate, time, zone }) {
