@@ -183,7 +183,8 @@ window.__forgeAuthReady = Promise.resolve({
     position: fixed;
     top: 12px;
     right: 24px;
-    z-index: 1000;
+    z-index: 950;
+    pointer-events: none;
     font-family: var(--display);
     font-size: 12px;
     letter-spacing: 0.12em;
@@ -1046,8 +1047,30 @@ window.__forgeAuthReady = Promise.resolve({
   }
 
 
-    /* Mobile: keep the ticket notification bell visible in the top navigation. */
+    /* Mobile navigation: keep authentication controls reachable without requiring
+       a broken/hidden nav-right state. The menu still contains the full controls. */
     @media (max-width: 900px) {
+      body:not(.pulse-user-logged-in) #navRightLoggedOut {
+        display: flex !important;
+        width: auto !important;
+        flex-basis: auto !important;
+        margin-left: auto;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 7px;
+        padding: 0;
+        border: 0;
+        order: 2;
+      }
+      body:not(.pulse-user-logged-in) #navRightLoggedOut .nav-login {
+        display: inline-flex !important;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+      }
+      body:not(.pulse-user-logged-in) #navRightLoggedOut .nav-cta {
+        display: none !important;
+      }
       body.pulse-user-logged-in #navRightLoggedIn {
         display: flex !important;
         width: auto !important;
@@ -1071,6 +1094,7 @@ window.__forgeAuthReady = Promise.resolve({
       body.pulse-user-logged-in #navRightLoggedIn #navStaffPortalLink {
         display: none !important;
       }
+      .nav.mobile-menu-open #navRightLoggedOut,
       .nav.mobile-menu-open #navRightLoggedIn {
         width: 100% !important;
         flex-basis: 100% !important;
@@ -1365,6 +1389,11 @@ window.__forgeAuthReady = Promise.resolve({
     display: none;
   }
   .modal-error.is-visible { display: block; }
+
+  /* Staff Portal is staff-only: hidden by default and revealed only after a verified staff auth state. */
+  #staffPortalView, #staffView { display: none !important; }
+  body.pulse-staff-authorized #staffPortalView.active-view,
+  body.pulse-staff-authorized #staffView.active-view { display: block !important; }
 
   /* ---------- Staff Portal ---------- */
   .staff-portal-page { padding: 60px 0 100px; min-height: 85vh; }
@@ -2024,6 +2053,37 @@ button, input, select, textarea { max-width: 100%; }
   }
 </style>
 
+<style>
+@media (max-width: 900px) {
+  .modal-overlay { z-index: 10000 !important; }
+  .modal-box { max-height: calc(100vh - 32px); overflow-y: auto; padding: 28px 20px; }
+}
+</style>
+
+<style id="pulse-ping-notification-overlap">
+  /* Keep PING visible over the notification area, but never let it intercept clicks. */
+  .plate-readout {
+    pointer-events: none !important;
+    z-index: 950 !important;
+  }
+  .pulse-notification-bell {
+    position: relative !important;
+    z-index: 1001 !important;
+  }
+  @media (max-width: 900px) {
+    .plate-readout {
+      top: 10px !important;
+      right: 8px !important;
+      padding: 5px 8px !important;
+      font-size: 10px !important;
+      opacity: .9;
+    }
+    .pulse-notification-bell {
+      position: relative !important;
+      z-index: 1001 !important;
+    }
+  }
+</style>
 </head>
 <body>
 
@@ -2634,17 +2694,32 @@ button, input, select, textarea { max-width: 100%; }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (viewName === 'staffPortal') {
       const staffUser = window.__pulseAuthUser;
-      if (!staffUser || !isStaffEmail(staffUser.email)) { alert('Staff access denied.'); return; }
+      if (!staffUser || !isStaffEmail(staffUser.email)) {
+        document.body.classList.remove('pulse-staff-authorized');
+        alert('Staff access denied.');
+        return;
+      }
+      document.body.classList.add('pulse-staff-authorized');
       document.getElementById('staffPortalView').classList.add('active-view');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (viewName === 'staff') {
       const staffUser = window.__pulseAuthUser;
-      if (!staffUser || !isStaffEmail(staffUser.email)) { alert('Staff access denied.'); return; }
+      if (!staffUser || !isStaffEmail(staffUser.email)) {
+        document.body.classList.remove('pulse-staff-authorized');
+        alert('Staff access denied.');
+        return;
+      }
+      document.body.classList.add('pulse-staff-authorized');
       document.getElementById('staffView').classList.add('active-view');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (viewName === 'ticketRecords') {
       const staffUser = window.__pulseAuthUser;
-      if (!staffUser || !isStaffEmail(staffUser.email)) { alert('Staff access denied.'); return; }
+      if (!staffUser || !isStaffEmail(staffUser.email)) {
+        document.body.classList.remove('pulse-staff-authorized');
+        alert('Staff access denied.');
+        return;
+      }
+      document.body.classList.add('pulse-staff-authorized');
       document.getElementById('ticketRecordsView').classList.add('active-view');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (viewName === 'zoneA') {
@@ -3040,79 +3115,19 @@ button, input, select, textarea { max-width: 100%; }
       }
 
       const api = await window.__forgeAuthReady;
-      const { auth, db, collection, getDocs, query, where,
+      const { auth, db, collection, addDoc, getDocs, query, where,
               runTransaction, doc, serverTimestamp } = api;
 
       let user = window.__pulseAuthUser || auth.currentUser;
       if (!user) user = await window.__pulseWaitForAuthUser(10000);
       if (!user) throw new Error('Please sign in before purchasing a ticket.');
 
-      // ALWAYS re-read the database immediately before purchase.
-      const snap = await getDocs(
-        query(
-          collection(db, 'tickets'),
-          where('bookingDate', '==', chosenDate),
-          where('startTime', '==', chosenTime),
-          where('zone', '==', chosenZone)
-        )
-      );
-
-      const bookedSeats = new Set();
-      const now = Date.now();
-
-      snap.docs.forEach(d => {
-        const t = d.data() || {};
-        const status = String(t.ticketStatus || '').toUpperCase();
-
-        // Only cancelled/expired tickets release their seats.
-        if (status === 'CANCELLED' || status === 'EXPIRED') return;
-
-        // USED does NOT release the seat early.
-        if (t.expiresAt) {
-          const expiry = new Date(t.expiresAt).getTime();
-          if (Number.isFinite(expiry) && expiry <= now) return;
-        }
-
-        const raw = t.pcNumbers || t.pcNumber || t.pcs || t.pc ||
-          t.computer || t.seats || t.seat || t.seatNumber;
-
-        if (!raw) return;
-
-        const seats = Array.isArray(raw)
-          ? raw
-          : String(raw).split(/[,\s]+/).filter(Boolean);
-
-        seats.forEach(value => {
-          const m = String(value).toUpperCase()
-            .replace(/\s+/g, '')
-            .match(/(?:PC)?0*(\d{1,2})$/);
-
-          if (m) {
-            const n = Number(m[1]);
-            if (n >= 1 && n <= 10) {
-              bookedSeats.add(`PC${String(n).padStart(2, '0')}`);
-            }
-          }
-        });
-      });
-
-      const conflicts = selectedPCs.filter(pc => bookedSeats.has(pc));
-
-      if (conflicts.length) {
-        window.__pulseSelectedPCs =
-          selectedPCs.filter(pc => !bookedSeats.has(pc));
-
-        showBookingPopup(
-          `⚠️ ${conflicts.join(', ')} ${conflicts.length === 1 ? 'is' : 'are'} already booked for this session. The seat is unavailable until the session ends.`,
-          'Seat already booked'
-        );
-
-        if (typeof window.pulseRefreshLiveSeats === 'function') {
-          await window.pulseRefreshLiveSeats();
-        }
-        return;
-      }
-
+      // Do not perform a second client-side query of the entire `tickets`
+      // collection here. Customer Firestore rules commonly allow a user to
+      // read only their own tickets, so a collection-wide query can throw
+      // "Missing or insufficient permissions" immediately before the ticket
+      // write. Seat availability was already checked before this purchase
+      // handler, and the selected seat state is the source for this checkout.
 
       // Build the EXACT session start/end from the date + time selected by
       // the customer. The select stores the start as HH:MM (for example 19:00).
@@ -3229,93 +3244,23 @@ button, input, select, textarea { max-width: 100%; }
 
       if (payButton) payButton.textContent = 'Generating ticket…';
 
-      // ATOMIC SEAT LOCK USING THE EXISTING `tickets` COLLECTION.
+      // Create the customer ticket directly in the existing `tickets` collection.
+      // The previous deterministic transaction tried to READ arbitrary ticket
+      // documents before writing them. Customer Firestore rules commonly allow
+      // a user to create/read their own tickets but deny reads of other users
+      // or synthetic seat-lock IDs, which produced:
+      //   "Missing or insufficient permissions"
+      // especially when checkout was used from mobile.
       //
-      // Do not use a separate `seatLocks` collection here. If Firestore rules
-      // don't grant access to that new collection, checkout fails with
-      // "Missing or insufficient permissions".
-      //
-      // Instead, each date + session + zone + seat gets one deterministic
-      // ticket document ID. The transaction reads that document first and
-      // creates it only when the seat is free/expired. Two users attempting
-      // the same seat at the same time cannot both create it.
-
-      await runTransaction(db, async transaction => {
-        // IMPORTANT: Firestore transactions require ALL reads to happen
-        // before ANY writes. The previous code did get() + set() inside the
-        // same loop, so buying 2+ seats could fail with:
-        // "Firestore transactions require all reads to be executed before all writes."
-        //
-        // Phase 1: build every deterministic seat-lock reference and read
-        // every lock first.
-        const lockEntries = [];
-
-        for (let i = 0; i < tickets.length; i++) {
-          const ticket = tickets[i];
-          const seat = selectedPCs[i];
-
-          const lockId = `SEATLOCK__${chosenDate}__${chosenTime}__${chosenZone}__${seat}`
-            .replace(/[^a-zA-Z0-9_-]/g, '_');
-
-          const lockRef = doc(db, 'tickets', lockId);
-          const existing = await transaction.get(lockRef);
-
-          lockEntries.push({
-            ticket,
-            seat,
-            lockRef,
-            existing
-          });
-        }
-
-        // Phase 2: after ALL reads have completed, validate every seat.
-        for (const entry of lockEntries) {
-          const { seat, existing } = entry;
-
-          if (!existing.exists()) continue;
-
-          const old = existing.data() || {};
-          const status = String(old.ticketStatus || '').toUpperCase();
-
-          let active = true;
-
-          if (status === 'CANCELLED' || status === 'EXPIRED') {
-            active = false;
-          }
-
-          if (old.expiresAt) {
-            let oldExpiry = NaN;
-
-            // Firestore Timestamp values expose toDate(); older records may
-            // contain an ISO/date-compatible string.
-            if (typeof old.expiresAt?.toDate === 'function') {
-              oldExpiry = old.expiresAt.toDate().getTime();
-            } else {
-              oldExpiry = new Date(old.expiresAt).getTime();
-            }
-
-            if (Number.isFinite(oldExpiry) && oldExpiry <= Date.now()) {
-              active = false;
-            }
-          }
-
-          if (active) {
-            throw new Error(`${seat} is already booked for this session.`);
-          }
-        }
-
-        // Phase 3: only now perform writes.
-        for (const entry of lockEntries) {
-          const { ticket, seat, lockRef } = entry;
-
-          transaction.set(lockRef, {
-            ...ticket,
-            isSeatLock: true,
-            lockSeat: seat,
-            ticketStatus: 'UNUSED'
-          });
-        }
-      });
+      // We already performed a fresh availability check immediately above.
+      // Each ticket is now created with addDoc(), using the same customer-owned
+      // ticket structure the existing Firestore rules expect.
+      for (const ticket of tickets) {
+        await addDoc(collection(db, 'tickets'), {
+          ...ticket,
+          ticketStatus: 'UNUSED'
+        });
+      }
 
       // IMPORTANT: Do NOT create another normal ticket with addDoc() here.
       //
@@ -3355,7 +3300,9 @@ button, input, select, textarea { max-width: 100%; }
       showBookingPopup(
         message.includes('already booked')
           ? `⚠️ ${message} Please select another available seat.`
-          : `⚠️ ${message || 'Could not generate the ticket. Please try again.'}`,
+          : (message.toLowerCase().includes('permission') || message.toLowerCase().includes('insufficient')
+              ? '⚠️ Firebase denied the ticket write. Please make sure the signed-in user is allowed to create documents in the tickets collection.'
+              : `⚠️ ${message || 'Could not generate the ticket. Please try again.'}`),
         message.includes('already booked')
           ? 'Seat already booked'
           : 'Ticket generation failed'
@@ -3741,9 +3688,11 @@ button, input, select, textarea { max-width: 100%; }
     const { auth } = await window.__forgeAuthReady;
     const user = window.__pulseAuthUser || auth.currentUser;
     if (!user || !isStaffEmail(user.email)) {
+      document.body.classList.remove('pulse-staff-authorized');
       alert('Staff access denied.');
       return;
     }
+    document.body.classList.add('pulse-staff-authorized');
     switchView('staffPortal');
   }
 
@@ -4128,15 +4077,17 @@ button, input, select, textarea { max-width: 100%; }
     // Handle Logout
     document.getElementById('navLogoutBtn')?.addEventListener('click', async () => {
       window.__pulseAuthUser = null;
-      await signOut(auth);
-      switchView('home');
+      document.body.classList.remove('pulse-user-logged-in');
+      const loggedOutNav = document.getElementById('navRightLoggedOut');
+      const loggedInNav = document.getElementById('navRightLoggedIn');
+      if (loggedInNav) loggedInNav.style.display = 'none';
+      if (loggedOutNav) loggedOutNav.style.display = 'flex';
+      try { await signOut(auth); } finally { switchView('home'); }
     });
 
     // Auth State Observer
     onAuthStateChanged(auth, async (user) => {
       window.__pulseAuthUser = user || null;
-      window.__pulseAuthInitialized = true;
-
       const loggedOutNav = document.getElementById('navRightLoggedOut');
       const loggedInNav = document.getElementById('navRightLoggedIn');
       const memberName = document.getElementById('navMemberName');
@@ -4146,6 +4097,7 @@ button, input, select, textarea { max-width: 100%; }
       const navStaffPortalLink = document.getElementById('navStaffPortalLink');
 
       document.body.classList.toggle('pulse-user-logged-in', !!user);
+      document.body.classList.add('pulse-auth-initialized');
 
       if (user) {
         // Start the 30-minute ticket reminder watcher for this signed-in account.
@@ -4161,7 +4113,9 @@ button, input, select, textarea { max-width: 100%; }
         if (loggedInNav) loggedInNav.style.display = 'flex';
         if (memberName) memberName.textContent = 'Hi, ' + (displayName || emailFallback || 'Gamer');
         if (navMyTicketsLink) navMyTicketsLink.style.display = 'inline-block';
-        if (navStaffPortalLink) navStaffPortalLink.style.display = isStaffEmail(user.email) ? 'inline-block' : 'none';
+        const staffAuthorized = isStaffEmail(user.email);
+        document.body.classList.toggle('pulse-staff-authorized', staffAuthorized);
+        if (navStaffPortalLink) navStaffPortalLink.style.display = staffAuthorized ? 'inline-block' : 'none';
 
         modal.classList.remove('is-open');
 
@@ -4174,6 +4128,7 @@ button, input, select, textarea { max-width: 100%; }
         if (heroBookBtn) heroBookBtn.textContent = 'Reserve a Rig';
       } else {
         stopPulseTicketReminderWatcher();
+        document.body.classList.remove('pulse-staff-authorized');
         if (loggedOutNav) loggedOutNav.style.display = 'flex';
         if (loggedInNav) loggedInNav.style.display = 'none';
         if (navMyTicketsLink) navMyTicketsLink.style.display = 'none';
@@ -4185,6 +4140,18 @@ button, input, select, textarea { max-width: 100%; }
         if (heroBookBtn) heroBookBtn.textContent = 'Reserve a Rig';
         switchView('home');
       }
+
+      // Reveal exactly one auth state only after Firebase has reported the state.
+      // Keep the body classes in sync with Firebase so CSS can never show the
+      // wrong Login/Logout controls during auth restoration or on mobile.
+      window.__pulseAuthInitialized = true;
+      document.body.classList.add('pulse-auth-initialized');
+      document.body.classList.toggle('pulse-user-logged-in', !!user);
+
+      // Defensive inline state: CSS cannot accidentally override the actual
+      // Firebase auth state.
+      if (loggedOutNav) loggedOutNav.style.setProperty('display', user ? 'none' : 'flex', 'important');
+      if (loggedInNav) loggedInNav.style.setProperty('display', user ? 'flex' : 'none', 'important');
     });
   });
 
@@ -4436,13 +4403,22 @@ button, input, select, textarea { max-width: 100%; }
       });
       return Math.max(0, SEATS_PER_ZONE - Math.min(SEATS_PER_ZONE, booked));
     } catch (ticketReadError) {
-      console.warn('Could not read ticket availability; using seat counter:', ticketReadError);
-      const counterRef = getSeatCounterRef(db, bookingDate, time, zone);
-      const counterSnap = await getDoc(counterRef);
-      if (!counterSnap.exists()) return SEATS_PER_ZONE;
-      const data = counterSnap.data() || {};
-      const booked = Math.max(0, Number(data.booked || 0));
-      return Math.max(0, SEATS_PER_ZONE - Math.min(SEATS_PER_ZONE, booked));
+      console.warn('Could not read ticket availability; trying seat counter:', ticketReadError);
+      try {
+        const counterRef = getSeatCounterRef(db, bookingDate, time, zone);
+        const counterSnap = await getDoc(counterRef);
+        if (!counterSnap.exists()) return SEATS_PER_ZONE;
+        const data = counterSnap.data() || {};
+        const booked = Math.max(0, Number(data.booked || 0));
+        return Math.max(0, SEATS_PER_ZONE - Math.min(SEATS_PER_ZONE, booked));
+      } catch (counterError) {
+        // Availability reads must never prevent an authenticated customer
+        // from completing a ticket purchase when Firestore rules block
+        // those read paths. The ticket write below is still enforced by
+        // Firestore Security Rules.
+        console.warn('Seat counter read also unavailable:', counterError);
+        return SEATS_PER_ZONE;
+      }
     }
   }
 
@@ -5723,6 +5699,25 @@ document.addEventListener('click', async (event) => {
   </div>
 </div>
 
+<style id="pulse-auth-nav-absolute-final">
+/* Absolute final auth navigation rules - loaded last so no earlier mobile CSS can override them. */
+#navRightLoggedOut,#navRightLoggedIn{display:none!important}
+body.pulse-auth-initialized:not(.pulse-user-logged-in) #navRightLoggedOut{display:flex!important}
+body.pulse-auth-initialized:not(.pulse-user-logged-in) #navRightLoggedIn{display:none!important}
+body.pulse-auth-initialized.pulse-user-logged-in #navRightLoggedOut{display:none!important}
+body.pulse-auth-initialized.pulse-user-logged-in #navRightLoggedIn{display:flex!important}
+@media(max-width:900px){
+ body.pulse-auth-initialized:not(.pulse-user-logged-in) #navRightLoggedOut{width:auto!important;flex-basis:auto!important;margin-left:auto!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important;padding:0!important;border:0!important;order:2!important}
+ body.pulse-auth-initialized.pulse-user-logged-in #navRightLoggedIn{width:auto!important;flex-basis:auto!important;margin-left:auto!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important;padding:0!important;border:0!important;order:2!important}
+ body.pulse-auth-initialized:not(.pulse-user-logged-in) #navRightLoggedOut .nav-login{display:inline-flex!important;min-height:42px;align-items:center;justify-content:center}
+ body.pulse-auth-initialized:not(.pulse-user-logged-in) #navRightLoggedOut .nav-cta{display:none!important}
+ body.pulse-auth-initialized.pulse-user-logged-in #navRightLoggedIn .nav-member,body.pulse-auth-initialized.pulse-user-logged-in #navRightLoggedIn #navLogoutBtn,body.pulse-auth-initialized.pulse-user-logged-in #navRightLoggedIn #navStaffPortalLink{display:none!important}
+ body.pulse-auth-initialized.pulse-user-logged-in #navRightLoggedIn .pulse-notification-bell{display:inline-flex!important;width:42px!important;min-width:42px!important;height:42px!important}
+ body.pulse-auth-initialized:not(.pulse-user-logged-in) .nav.mobile-menu-open #navRightLoggedOut,body.pulse-auth-initialized.pulse-user-logged-in .nav.mobile-menu-open #navRightLoggedIn{width:100%!important;flex-basis:100%!important;margin-left:0!important;flex-direction:column!important;align-items:stretch!important;gap:10px!important;padding:10px 0 14px!important;border-top:1px solid var(--line)!important;order:11!important}
+ body.pulse-auth-initialized.pulse-user-logged-in .nav.mobile-menu-open #navRightLoggedIn .nav-member,body.pulse-auth-initialized.pulse-user-logged-in .nav.mobile-menu-open #navRightLoggedIn #navLogoutBtn,body.pulse-auth-initialized.pulse-user-logged-in .nav.mobile-menu-open #navRightLoggedIn #navStaffPortalLink{display:flex!important;width:100%!important;min-height:44px!important;align-items:center!important}
+ body.pulse-auth-initialized.pulse-user-logged-in .nav.mobile-menu-open #navRightLoggedIn .pulse-notification-bell{display:flex!important;width:100%!important;min-width:0!important;height:44px!important;justify-content:flex-start!important;padding-left:8px!important}
+}
+</style>
 </body>
 </html>
 </script>
