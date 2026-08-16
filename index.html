@@ -1478,6 +1478,128 @@
     font-weight: 600;
   }
 </style>
+
+<style id="pulse-smooth-ui">
+  /* Simple, premium booking polish */
+  .pulse-smooth-card{
+    margin:18px 0 8px;padding:16px;border:1px solid rgba(0,242,254,.16);
+    border-radius:16px;background:linear-gradient(145deg,rgba(12,16,24,.98),rgba(20,24,33,.94));
+    box-shadow:0 10px 28px rgba(0,0,0,.18)
+  }
+  .pulse-smooth-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+  .pulse-smooth-head strong{font-size:16px}.pulse-smooth-head small{display:block;color:#9ca8b8;margin-top:3px}
+  .pulse-smooth-summary{font-size:12px;font-weight:800;color:#00f2fe;white-space:nowrap}
+  .pulse-smooth-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+  .pulse-smooth-pc{
+    border:1px solid rgba(0,255,136,.20);border-radius:10px;padding:10px 3px;
+    background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;
+    transition:transform .16s ease,border-color .16s ease,background .16s ease;
+  }
+  .pulse-smooth-pc:not(:disabled):hover{transform:translateY(-2px);border-color:rgba(0,242,254,.65)}
+  .pulse-smooth-pc.booked{background:rgba(255,77,109,.10);border-color:rgba(255,77,109,.35);color:#ff718b}
+  .pulse-smooth-pc.selected{outline:2px solid #00f2fe;box-shadow:0 0 16px rgba(0,242,254,.16)}
+  .pulse-smooth-pc:disabled{cursor:not-allowed;opacity:.95}
+  .pulse-smooth-legend{display:flex;gap:14px;margin-top:11px;font-size:11px;color:#9ca8b8}
+  .pulse-smooth-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#00ff88;margin-right:5px}
+  .pulse-smooth-dot.red{background:#ff4d6d}
+  .pulse-smooth-note{margin-top:9px;font-size:11px;color:#9ca8b8;min-height:15px}
+  /* Hide the old bulky availability presentation but retain its data container/logic. */
+  #seatAvailability{display:none!important}
+  @media(max-width:600px){
+    .pulse-smooth-card{padding:14px}.pulse-smooth-grid{gap:5px}
+    .pulse-smooth-pc{padding:9px 2px;font-size:10px}
+  }
+</style>
+
+
+<style id="pulse-multi-seat-style">
+.pulse-seat-stats{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 13px;padding:9px 11px;
+border-radius:10px;background:rgba(255,255,255,.035);font-size:12px;color:#aeb7c7}
+.pulse-seat-stats b{color:#f2f7ff}
+.pulse-smooth-pc.selected{background:rgba(0,242,254,.12);border-color:rgba(0,242,254,.75);
+box-shadow:0 0 15px rgba(0,242,254,.16);color:#fff}
+.pulse-smooth-dot.blue{background:#00f2fe}
+.pulse-smooth-pc small{opacity:.85}
+</style>
+
+
+<style id="pulse-remove-quantity">
+  #quantity,
+  #people,
+  #ticketQuantity,
+  [name="quantity"],
+  [name="people"],
+  [name="ticketQuantity"],
+  .quantity-control,
+  .ticket-quantity,
+  .quantity-selector,
+  .people-selector {
+    display:none !important;
+  }
+</style>
+
+
+<style id="pulse-payment-live-seats-style">
+.pulse-payment-live-seats{margin:16px 0;padding:15px;border-radius:15px;
+background:linear-gradient(145deg,rgba(11,15,22,.98),rgba(20,24,33,.95));
+border:1px solid rgba(0,242,254,.16);box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.pls-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+.pls-head strong{display:block;font-size:16px}.pls-head small{display:block;color:#98a4b5;font-size:11px;margin-top:3px}
+.pls-summary{display:flex;gap:10px;font-size:11px;color:#aeb7c7;white-space:nowrap}
+.pls-summary b{color:#fff}
+.pls-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+.pls-seat{border:1px solid rgba(0,255,136,.23);border-radius:9px;padding:9px 2px;
+background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cursor:pointer;transition:.15s}
+.pls-seat:hover:not(:disabled){transform:translateY(-2px);border-color:rgba(0,242,254,.65)}
+.pls-seat.booked{background:rgba(255,77,109,.1);border-color:rgba(255,77,109,.35);color:#ff718b;cursor:not-allowed}
+.pls-seat.selected{background:rgba(0,242,254,.12);border-color:#00f2fe;box-shadow:0 0 14px rgba(0,242,254,.15)}
+.pls-seat small{display:block;margin-top:3px;font-size:9px;opacity:.8}
+.pls-legend{display:flex;gap:13px;margin-top:10px;font-size:10px;color:#98a4b5}
+.pls-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#00ff88;margin-right:4px}
+.pls-dot.booked{background:#ff4d6d}.pls-dot.selected{background:#00f2fe}
+.pls-message{margin-top:8px;font-size:11px;color:#98a4b5;min-height:14px}
+@media(max-width:600px){.pls-head{align-items:flex-start;flex-direction:column}.pls-summary{width:100%;justify-content:space-between}.pls-grid{gap:5px}.pls-seat{padding:8px 1px;font-size:10px}}
+</style>
+
+
+<style id="hide-only-number-of-tickets">
+  #ticketQuantity,
+  label[for="ticketQuantity"],
+  #quantitySummary {
+    display:none !important;
+  }
+</style>
+
+
+<style id="pulse-pass-selection-fix">
+  /* Keep pass cards/buttons interactive and above decorative layers */
+  .pass-card, .pass-option, .plan-card, .pricing-card,
+  [data-pass], [data-plan], button[onclick*="pass"], button[onclick*="Pass"] {
+    pointer-events:auto !important;
+    cursor:pointer !important;
+    position:relative;
+    z-index:5;
+  }
+  .pass-card *, .pass-option *, .plan-card *, .pricing-card * {
+    pointer-events:none;
+  }
+</style>
+
+
+<style id="pulse-seat-click-fix">
+  #plsGrid .pls-seat,
+  #pulseSmoothGrid .pulse-smooth-pc {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    position: relative;
+    z-index: 20;
+  }
+  #plsGrid .pls-seat:disabled,
+  #pulseSmoothGrid .pulse-smooth-pc:disabled {
+    cursor: not-allowed !important;
+  }
+</style>
+
 </head>
 <body>
 
@@ -1810,22 +1932,37 @@
               <small id="zoneHint" style="display:block;margin-top:7px;color:var(--bone-dim);font-size:11px;"></small>
             </div>
 
-            <div class="checkout-field" style="margin-top:16px;">
-              <label for="ticketQuantity">Number of Tickets</label>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <input id="ticketQuantity" type="number" min="1" max="10" value="1"
-                  inputmode="numeric" aria-label="Number of tickets"
-                  style="width:110px;padding:12px 14px;background:var(--panel-raised);color:var(--bone);border:1px solid var(--line);border-radius:8px;font:inherit;">
-        <div id="seatAvailability" aria-live="polite"></div>
-
-                <span id="quantitySummary" style="color:var(--bone-dim);font-size:12px;"></span>
-              </div>
-            </div>
+            
           </div>
-        </div>
+        
+
+
+</div>
 
         <!-- Payment QR Options -->
-        <div class="payment-options">
+        
+<div id="pulsePaymentLiveSeats" class="pulse-payment-live-seats" aria-live="polite">
+  <div class="pls-head">
+    <div>
+      <strong>💺 Live Seat Status</strong>
+      <small>Select the available PCs you want to book</small>
+    </div>
+    <div class="pls-summary">
+      <span>Remaining <b id="plsRemaining">—</b></span>
+      <span>Selected <b id="plsSelected">0</b></span>
+      <span>Total <b id="plsTotal">Rs. 0</b></span>
+    </div>
+  </div>
+  <div id="plsGrid" class="pls-grid"></div>
+  <div class="pls-legend">
+    <span><i class="pls-dot"></i>Available</span>
+    <span><i class="pls-dot booked"></i>Booked</span>
+    <span><i class="pls-dot selected"></i>Selected</span>
+  </div>
+  <div id="plsMessage" class="pls-message">Select date, time and zone to see live seats.</div>
+</div>
+
+<div class="payment-options">
           <div class="qr-card">
             <h4>eSewa Pay QR</h4>
             <img id="esewaQrImg" src="" alt="eSewa QR">
@@ -1937,7 +2074,10 @@
           <button type="button" id="forgotPasswordBtn">Forgot password?</button>
         </div>
         <button type="submit" class="modal-submit">Log In</button>
-      </form>
+      
+
+
+</form>
       <div class="modal-switch">
         Don't have an account? <button type="button" id="switchToSignup">Create one</button>
       </div>
@@ -2189,6 +2329,28 @@
   });
 
   function selectPassPlan(planName, price, durationHours, isNightOwl) {
+    // Open the payment/checkout section immediately when a pass is clicked.
+    // Authentication can still be requested on top of the checkout page.
+    currentSelectedPlan = {
+      name: planName,
+      price: price,
+      durationHours: durationHours,
+      isNightOwl: !!isNightOwl
+    };
+
+    const badge = document.getElementById('selectedPlanBadge');
+    if (badge) {
+      const firstNode = badge.childNodes[0];
+      const text = `Selected: ${planName} — Rs. ${price.toLocaleString()} — ${isNightOwl ? '11 PM–6 AM' : durationHours + ' Hours'}`;
+      if (firstNode && firstNode.nodeType === Node.TEXT_NODE) {
+        firstNode.nodeValue = text;
+      } else {
+        badge.insertBefore(document.createTextNode(text), badge.firstChild);
+      }
+    }
+
+    switchView('checkout');
+
     // New checkout = new payment identity.
     const paymentRandom =
       typeof crypto !== 'undefined' && crypto.randomUUID
@@ -2293,7 +2455,7 @@
 
   function updateQuantitySummary() {
     if (!currentSelectedPlan) return;
-    const quantity = getTicketQuantity();
+    const quantity = (Array.isArray(window.__pulseSelectedPCs) && window.__pulseSelectedPCs.length) ? window.__pulseSelectedPCs.length : getTicketQuantity();
     const total = currentSelectedPlan.price * quantity;
     const summary = document.getElementById('quantitySummary');
     if (summary) {
@@ -2313,277 +2475,446 @@
   // This still simulates a successful payment. Replace this with a real
   // eSewa/Khalti server-side payment verification before going live.
   async function verifyPayment() {
-  // Prevent duplicate clicks only while THIS purchase is being written.
-  if (window.__ticketGenerating === true) return;
+    if (window.__ticketGenerating) return;
 
-  if (!currentSelectedPlan) {
-    showBookingPopup('⚠️ Please fill all required options before generating your ticket. Select a pass first.', 'Please fill all options');
-    return;
-  }
+    const dateEl = document.getElementById('passDateInput');
+    const timeEl = document.getElementById('passTimeInput');
+    const zoneEl = document.getElementById('zoneSelect');
 
-  const dateEl = document.getElementById('passDateInput');
-  const timeEl = document.getElementById('passTimeInput');
-  const zoneEl = document.getElementById('zoneSelect');
-  const qtyEl = document.getElementById('ticketQuantity');
+    const chosenDate = String(dateEl?.value || '').trim();
+    const chosenTime = String(timeEl?.value || '').trim();
+    const chosenZone = String(zoneEl?.value || '').trim();
 
-  const chosenDate = String(dateEl?.value || '').trim();
-  const chosenTime = String(timeEl?.value || '').trim();
-  const chosenZone = String(zoneEl?.value || '').trim();
-  const rawQuantity = Number(qtyEl?.value || 0);
-  const quantity = Math.max(1, Math.min(10, Number.isFinite(rawQuantity) ? rawQuantity : 0));
-
-  const missing = [];
-  if (!chosenDate) missing.push('Booking date');
-  if (!chosenTime) missing.push('Session time');
-  if (!chosenZone) missing.push('Gaming zone');
-  if (!Number.isInteger(rawQuantity) || rawQuantity < 1) missing.push('Number of tickets');
-
-  if (missing.length) {
-    showBookingPopup(
-      `⚠️ Please fill all required options before generating your ticket. Missing: ${missing.join(', ')}.`,
-      'Please fill all options'
-    );
-    return;
-  }
-
-  // HARD CHECK: a customer cannot purchase a session whose start time has already passed today.
-  if (!validateBookingTimeBeforePurchase(chosenDate, chosenTime)) return;
-
-  // Re-check seats immediately before creating tickets so a stale availability display cannot overbook.
-  const liveTimeRange = currentSelectedPlan.isNightOwl
-    ? '11:00 PM – 6:00 AM'
-    : `${formatHour(Number(chosenTime.split(':')[0]))} – ${formatHour(Number(chosenTime.split(':')[0]) + Number(currentSelectedPlan.durationHours || 0))}`;
-  const liveAvailableSeats = await getAvailableSeatsForSelection({
-    bookingDate: chosenDate, time: liveTimeRange, zone: chosenZone
-  });
-  renderSeatAvailability(document.getElementById('seatAvailability') || document.getElementById('availableSeats'), liveAvailableSeats, quantity);
-  if (liveAvailableSeats < quantity) {
-    showBookingPopup(
-      liveAvailableSeats > 0
-        ? `Only ${liveAvailableSeats} seat${liveAvailableSeats === 1 ? '' : 's'} remain for this session. You selected ${quantity}. Please reduce the number of tickets.`
-        : 'This session is sold out. Please choose another date, time, or zone.',
-      liveAvailableSeats > 0 ? '🎮 Not enough seats' : '🚫 Session sold out'
-    );
-    return;
-  }
-
-  const payButton = document.getElementById('payButton');
-  const originalButtonText =
-    payButton?.dataset.originalText ||
-    payButton?.textContent ||
-    'Confirm Demo Payment — Generate Ticket';
-
-  // Lock immediately. This prevents the "generating again and again" problem.
-  window.__ticketGenerating = true;
-  if (payButton) {
-    payButton.dataset.originalText = originalButtonText;
-    payButton.disabled = true;
-    payButton.textContent = 'Generating ticket…';
-  }
-
-  try {
-    const { auth, db, collection, addDoc, serverTimestamp } =
-      await window.__forgeAuthReady;
-
-    const user = auth.currentUser;
-    if (!user) throw new Error('You must be signed in to generate a ticket.');
-
-    let timeRange = chosenTime;
-
-    // Keep Night Owl behavior unchanged.
-    if (currentSelectedPlan.isNightOwl) {
-      timeRange = '11:00 PM – 6:00 AM';
-    } else {
-      const startHour = Number(chosenTime.split(':')[0]);
-      const endHour = startHour + Number(currentSelectedPlan.durationHours || 0);
-      timeRange = `${formatHour(startHour)} – ${formatHour(endHour)}`;
+    if (!currentSelectedPlan) {
+      showBookingPopup('⚠️ Please select a pass before generating your ticket.', 'Please select a pass');
+      return;
     }
 
-    const gamerName = user.displayName || user.email.split('@')[0];
-    const tickets = [];
+    const missing = [];
+    if (!chosenDate) missing.push('Booking date');
+    if (!chosenTime) missing.push('Session time');
+    if (!chosenZone) missing.push('Gaming zone');
 
-    for (let i = 0; i < quantity; i++) {
-      const randomPart =
-        typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : Math.random().toString(36).slice(2) + Date.now().toString(36) + i;
-
-      const uniqueToken =
-        'PULSE-' + randomPart.replace(/-/g, '').toUpperCase();
-
-      tickets.push({
-        token: uniqueToken,
-        userId: user.uid,
-        userEmail: user.email,
-        userName: gamerName,
-        fullName: gamerName,
-        planName: currentSelectedPlan.name,
-        amount: Number(currentSelectedPlan.price || 0),
-        // One Firestore document = one seat and one QR ticket.
-        // The purchase quantity is still used for the checkout total.
-        quantity: 1,
-        ticketIndex: i + 1,
-        purchaseQuantity: quantity,
-        date: chosenDate,
-        time: timeRange,
-        startTime: chosenTime,
-        durationHours: Number(currentSelectedPlan.durationHours || 0),
-        zone: chosenZone,
-        ticketId: uniqueToken,
-        bookingDate: chosenDate,
-        paymentId: window.__pulsePaymentId || '',
-        paymentMethod: 'QR',
-        paymentTotal: Number(currentSelectedPlan.price || 0) *
-          (typeof quantity !== 'undefined' ? Number(quantity) : getTicketQuantity()),
-        paymentStatus: 'PAID',
-        ticketStatus: 'UNUSED',
-        expiresAt: (() => {
-          try {
-            const parts = String(timeRange).split(/\s*[–-]\s*/);
-            const startText = parts.length > 1 ? parts[0].trim() : chosenTime;
-            const endText = parts.length > 1 ? parts[parts.length - 1].trim() : '';
-
-            const startTime = parseTimePart(startText);
-            const endTime = parseTimePart(endText);
-
-            if (!endTime || !chosenDate) return null;
-
-            // Expiry is always based on the customer's selected travel date.
-            // Night Owl (11 PM–6 AM) crosses midnight:
-            // selected date 11:00 PM -> following day 6:00 AM.
-            const expiry = new Date(`${chosenDate}T00:00:00`);
-            expiry.setHours(endTime.hour, endTime.minute, 0, 0);
-
-            if (
-              startTime &&
-              (
-                endTime.hour < startTime.hour ||
-                (endTime.hour === startTime.hour && endTime.minute < startTime.minute)
-              )
-            ) {
-              expiry.setDate(expiry.getDate() + 1);
-            }
-
-            return expiry.toISOString();
-          } catch (expiryError) {
-            console.warn('Could not calculate ticket expiry:', expiryError);
-            return null;
-          }
-        })(),
-        qrUrl:
-          'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' +
-          encodeURIComponent(uniqueToken),
-        createdAt: serverTimestamp(),
-        usedAt: null,
-        usedBy: null
-      });
+    if (missing.length) {
+      showBookingPopup(
+        `⚠️ Please fill all required options before generating your ticket. Missing: ${missing.join(', ')}.`,
+        'Please fill all options'
+      );
+      return;
     }
 
-    // FINAL ATOMIC BOOKING
-    // The seat counter is the authoritative shared lock for DATE + SESSION + ZONE.
-    // Existing active tickets are used only to seed a missing counter. Once the
-    // counter exists, Firestore transactions serialize simultaneous bookings.
-    const { doc, getDoc, getDocs, runTransaction } = await window.__forgeAuthReady;
-    const counterRef = getSeatCounterRef(db, chosenDate, timeRange, chosenZone);
-    const ticketRefs = tickets.map(ticket => window.__pulseDoc(db, 'tickets', ticket.token));
+    // The selected seats are the ticket quantity. Number of tickets is NOT required.
+    let selectedPCs = [];
+    if (typeof window.__pulseGetPrimarySelectedPCs === 'function') {
+      selectedPCs = [...new Set(window.__pulseGetPrimarySelectedPCs())];
+    } else if (typeof window.pulseGetPaymentSelectedPCs === 'function') {
+      selectedPCs = [...new Set(window.pulseGetPaymentSelectedPCs())];
+    } else if (Array.isArray(window.__pulseSelectedPCs)) {
+      selectedPCs = [...new Set(window.__pulseSelectedPCs.filter(Boolean))];
+    }
 
-    // Seed value for an existing installation where the counter document does not
-    // exist yet. This read is intentionally outside the transaction; the transaction
-    // re-reads the counter and will retry if another user creates it first.
-    let seededBooked = Math.max(0, SEATS_PER_ZONE - Number(liveAvailableSeats || SEATS_PER_ZONE));
+    // Final source-of-truth fallback: read the visible seat buttons.
+    // Any button with the selected class/aria state is a seat the user chose.
+    if (!selectedPCs.length) {
+      const visibleSelected = Array.from(
+        document.querySelectorAll(
+          '#plsGrid [data-pc], #pulseSmoothGrid [data-pc]'
+        )
+      ).filter(btn => {
+        const pc = btn.dataset.pc;
+        if (!pc) return false;
+        return btn.classList.contains('selected') ||
+               btn.classList.contains('active') ||
+               btn.getAttribute('aria-selected') === 'true' ||
+               btn.dataset.selected === 'true';
+      }).map(btn => btn.dataset.pc);
+
+      if (visibleSelected.length) {
+        selectedPCs = [...new Set(visibleSelected)];
+      }
+    }
+
+    // Also inspect the displayed selected-seat summary as a fallback.
+    if (!selectedPCs.length) {
+      const summary = document.querySelector(
+        '#plsMessage, #pulseSmoothNote, #selectedSeats, #selectedSeatDisplay'
+      );
+      const text = summary?.textContent || '';
+      const matches = text.match(/PC\s*0?\d+/gi) || [];
+      if (matches.length) {
+        selectedPCs = [...new Set(
+          matches.map(x => x.toUpperCase().replace(/\s+/g, ''))
+        )];
+      }
+    }
+
+    window.__pulseSelectedPCs = selectedPCs;
+
+    if (!selectedPCs.length) {
+      showBookingPopup(
+        '⚠️ Please select at least one available seat before paying for your ticket.',
+        'Please select a seat'
+      );
+      return;
+    }
+
+    if (selectedPCs.length > 10) {
+      showBookingPopup('You can select a maximum of 10 seats.', 'Too many seats');
+      return;
+    }
+
+    const quantity = selectedPCs.length;
+
+    if (typeof validateBookingTimeBeforePurchase === 'function' &&
+        !validateBookingTimeBeforePurchase(chosenDate, chosenTime)) {
+      return;
+    }
+
+    window.__ticketGenerating = true;
+
+    const payButton = document.getElementById('payButton');
+    const oldButtonText = payButton?.textContent || 'Confirm Demo Payment — Generate Ticket';
+
     try {
-      const existingTicketsSnap = await getDocs(collection(db, 'tickets'));
-      const key = `${String(chosenDate).trim()}__${normalizeBookingTime(timeRange)}__${normalizeZone(chosenZone)}`;
-      let activeBooked = 0;
-      existingTicketsSnap.docs.forEach(ticketDoc => {
-        const ticket = ticketDoc.data() || {};
-        if (getSeatKey(ticket) === key) activeBooked += getReservedSeatCount(ticket);
-      });
-      seededBooked = Math.min(SEATS_PER_ZONE, Math.max(0, activeBooked));
-    } catch (seedError) {
-      console.warn('Could not seed seat counter from existing tickets; using displayed availability.', seedError);
-    }
-
-    await runTransaction(db, async (transaction) => {
-      const counterSnap = await transaction.get(counterRef);
-      const counterData = counterSnap.exists() ? (counterSnap.data() || {}) : {};
-      const booked = counterSnap.exists()
-        ? Math.min(SEATS_PER_ZONE, Math.max(0, Number(counterData.booked || 0)))
-        : seededBooked;
-      const available = Math.max(0, SEATS_PER_ZONE - booked);
-
-      if (available < quantity) {
-        throw new Error(
-          available > 0
-            ? `Only ${available} seat${available === 1 ? '' : 's'} remain. Someone else may have just booked seats. Please refresh and try again.`
-            : 'This session is sold out. Someone else may have just booked the remaining seats.'
-        );
+      if (payButton) {
+        payButton.disabled = true;
+        payButton.textContent = 'Checking seats…';
       }
 
-      transaction.set(counterRef, {
-        total: SEATS_PER_ZONE,
-        booked: booked + quantity,
-        available: SEATS_PER_ZONE - booked - quantity,
-        date: chosenDate,
-        time: normalizeBookingTime(timeRange),
-        zone: normalizeZone(chosenZone),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      const api = await window.__forgeAuthReady;
+      const { auth, db, collection, getDocs, query, where,
+              runTransaction, doc, serverTimestamp } = api;
 
-      // One Firestore document represents one physical seat/ticket.
-      tickets.forEach((ticket, index) => {
-        transaction.set(ticketRefs[index], ticket);
+      const user = auth.currentUser;
+      if (!user) throw new Error('Please sign in before purchasing a ticket.');
+
+      // ALWAYS re-read the database immediately before purchase.
+      const snap = await getDocs(
+        query(
+          collection(db, 'tickets'),
+          where('bookingDate', '==', chosenDate),
+          where('startTime', '==', chosenTime),
+          where('zone', '==', chosenZone)
+        )
+      );
+
+      const bookedSeats = new Set();
+      const now = Date.now();
+
+      snap.docs.forEach(d => {
+        const t = d.data() || {};
+        const status = String(t.ticketStatus || '').toUpperCase();
+
+        // Only cancelled/expired tickets release their seats.
+        if (status === 'CANCELLED' || status === 'EXPIRED') return;
+
+        // USED does NOT release the seat early.
+        if (t.expiresAt) {
+          const expiry = new Date(t.expiresAt).getTime();
+          if (Number.isFinite(expiry) && expiry <= now) return;
+        }
+
+        const raw = t.pcNumbers || t.pcNumber || t.pcs || t.pc ||
+          t.computer || t.seats || t.seat || t.seatNumber;
+
+        if (!raw) return;
+
+        const seats = Array.isArray(raw)
+          ? raw
+          : String(raw).split(/[,\s]+/).filter(Boolean);
+
+        seats.forEach(value => {
+          const m = String(value).toUpperCase()
+            .replace(/\s+/g, '')
+            .match(/(?:PC)?0*(\d{1,2})$/);
+
+          if (m) {
+            const n = Number(m[1]);
+            if (n >= 1 && n <= 10) {
+              bookedSeats.add(`PC${String(n).padStart(2, '0')}`);
+            }
+          }
+        });
       });
-    });
 
-    // Clear the checkout state after successful payment so a second click
-    // cannot regenerate the same purchase.
-    currentSelectedPlan = null;
-    window.__pulsePaymentId = null;
+      const conflicts = selectedPCs.filter(pc => bookedSeats.has(pc));
 
-    if (dateEl) dateEl.value = '';
-    if (timeEl) timeEl.value = '';
-    if (zoneEl) zoneEl.selectedIndex = 0;
-    if (qtyEl) qtyEl.value = '1';
+      if (conflicts.length) {
+        window.__pulseSelectedPCs =
+          selectedPCs.filter(pc => !bookedSeats.has(pc));
 
-    // Purchase completed. Completely unlock checkout BEFORE rendering/navigating.
-    window.__ticketGenerating = false;
-    window.__pulseGenerating = false;
+        showBookingPopup(
+          `⚠️ ${conflicts.join(', ')} ${conflicts.length === 1 ? 'is' : 'are'} already booked for this session. The seat is unavailable until the session ends.`,
+          'Seat already booked'
+        );
 
-    if (payButton) {
-      payButton.disabled = false;
-      payButton.removeAttribute('data-busy');
-      payButton.textContent = 'Confirm Demo Payment — Generate Ticket';
+        if (typeof window.pulseRefreshLiveSeats === 'function') {
+          await window.pulseRefreshLiveSeats();
+        }
+        return;
+      }
+
+
+      // Build the EXACT session start/end from the date + time selected by
+      // the customer. The select stores the start as HH:MM (for example 19:00).
+      // Normal passes end after the selected pass duration. Night Owl (23:00)
+      // ends at 06:00 the following day.
+      let sessionStartAt = null;
+      let sessionEndAt = null;
+      let expiresAt = null;
+      let sessionTimeLabel = chosenTime;
+
+      try {
+        const parseClock = value => {
+          const m = String(value).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+          if (!m) return null;
+
+          let h = Number(m[1]);
+          const min = Number(m[2]);
+          const ap = (m[3] || '').toUpperCase();
+
+          if (ap === 'AM' && h === 12) h = 0;
+          if (ap === 'PM' && h !== 12) h += 12;
+
+          if (!Number.isFinite(h) || !Number.isFinite(min) ||
+              h < 0 || h > 23 || min < 0 || min > 59) {
+            return null;
+          }
+
+          return { h, min };
+        };
+
+        const startClock = parseClock(chosenTime);
+
+        if (startClock) {
+          const start = new Date(`${chosenDate}T00:00:00`);
+          start.setHours(startClock.h, startClock.min, 0, 0);
+
+          const durationHours = Number(currentSelectedPlan.durationHours || 0);
+
+          const end = new Date(start);
+
+          if (currentSelectedPlan.isNightOwl) {
+            // Night Owl is always 11:00 PM -> 6:00 AM next day.
+            end.setDate(end.getDate() + 1);
+            end.setHours(6, 0, 0, 0);
+          } else {
+            end.setTime(end.getTime() + Math.max(0, durationHours) * 60 * 60 * 1000);
+          }
+
+          sessionStartAt = start.toISOString();
+          sessionEndAt = end.toISOString();
+          expiresAt = sessionEndAt;
+
+          const formatClock = d => d.toLocaleTimeString([], {
+            hour: 'numeric',
+            minute: '2-digit'
+          });
+
+          sessionTimeLabel = `${formatClock(start)} – ${formatClock(end)}`;
+        }
+      } catch (_) {}
+
+      // Create one ticket for each selected seat.
+      const tickets = selectedPCs.map((seat, index) => {
+        const tokenBase =
+          (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID().replace(/-/g, '')
+            : `${Date.now()}${Math.random().toString(36).slice(2)}${index}`;
+
+        return {
+          token: `PULSE-${tokenBase.toUpperCase()}`,
+          userId: user.uid,
+          userEmail: user.email || '',
+          userName: user.displayName || user.email?.split('@')[0] || 'Gamer',
+
+          planName: currentSelectedPlan.name,
+          amount: Number(currentSelectedPlan.price || 0),
+
+          quantity: 1,
+          purchaseQuantity: quantity,
+
+          date: chosenDate,
+          bookingDate: chosenDate,
+
+          // Exact session selected by the customer.
+          // startTime remains HH:MM for database queries/seat matching.
+          startTime: chosenTime,
+          time: sessionTimeLabel,
+          sessionTime: sessionTimeLabel,
+          sessionStartAt,
+          sessionEndAt,
+
+          zone: chosenZone,
+
+          // CRITICAL: save the exact seat.
+          pcNumbers: [seat],
+          pcNumber: seat,
+          seat: seat,
+
+          paymentId: window.__pulsePaymentId || '',
+          paymentMethod: 'QR',
+          paymentStatus: 'PAID',
+          ticketStatus: 'UNUSED',
+
+          // expiresAt is the exact session end timestamp.
+          // Seats remain booked until this time.
+          expiresAt,
+
+          qrUrl:
+            `https://quickchart.io/qr?text=${encodeURIComponent(`PULSE-${tokenBase}`)}&size=200`,
+
+          createdAt: serverTimestamp()
+        };
+      });
+
+      if (payButton) payButton.textContent = 'Generating ticket…';
+
+      // ATOMIC SEAT LOCK USING THE EXISTING `tickets` COLLECTION.
+      //
+      // Do not use a separate `seatLocks` collection here. If Firestore rules
+      // don't grant access to that new collection, checkout fails with
+      // "Missing or insufficient permissions".
+      //
+      // Instead, each date + session + zone + seat gets one deterministic
+      // ticket document ID. The transaction reads that document first and
+      // creates it only when the seat is free/expired. Two users attempting
+      // the same seat at the same time cannot both create it.
+
+      await runTransaction(db, async transaction => {
+        // IMPORTANT: Firestore transactions require ALL reads to happen
+        // before ANY writes. The previous code did get() + set() inside the
+        // same loop, so buying 2+ seats could fail with:
+        // "Firestore transactions require all reads to be executed before all writes."
+        //
+        // Phase 1: build every deterministic seat-lock reference and read
+        // every lock first.
+        const lockEntries = [];
+
+        for (let i = 0; i < tickets.length; i++) {
+          const ticket = tickets[i];
+          const seat = selectedPCs[i];
+
+          const lockId = `SEATLOCK__${chosenDate}__${chosenTime}__${chosenZone}__${seat}`
+            .replace(/[^a-zA-Z0-9_-]/g, '_');
+
+          const lockRef = doc(db, 'tickets', lockId);
+          const existing = await transaction.get(lockRef);
+
+          lockEntries.push({
+            ticket,
+            seat,
+            lockRef,
+            existing
+          });
+        }
+
+        // Phase 2: after ALL reads have completed, validate every seat.
+        for (const entry of lockEntries) {
+          const { seat, existing } = entry;
+
+          if (!existing.exists()) continue;
+
+          const old = existing.data() || {};
+          const status = String(old.ticketStatus || '').toUpperCase();
+
+          let active = true;
+
+          if (status === 'CANCELLED' || status === 'EXPIRED') {
+            active = false;
+          }
+
+          if (old.expiresAt) {
+            let oldExpiry = NaN;
+
+            // Firestore Timestamp values expose toDate(); older records may
+            // contain an ISO/date-compatible string.
+            if (typeof old.expiresAt?.toDate === 'function') {
+              oldExpiry = old.expiresAt.toDate().getTime();
+            } else {
+              oldExpiry = new Date(old.expiresAt).getTime();
+            }
+
+            if (Number.isFinite(oldExpiry) && oldExpiry <= Date.now()) {
+              active = false;
+            }
+          }
+
+          if (active) {
+            throw new Error(`${seat} is already booked for this session.`);
+          }
+        }
+
+        // Phase 3: only now perform writes.
+        for (const entry of lockEntries) {
+          const { ticket, seat, lockRef } = entry;
+
+          transaction.set(lockRef, {
+            ...ticket,
+            isSeatLock: true,
+            lockSeat: seat,
+            ticketStatus: 'UNUSED'
+          });
+        }
+      });
+
+      // IMPORTANT: Do NOT create another normal ticket with addDoc() here.
+      //
+      // The deterministic SEATLOCK document above already contains the complete
+      // customer ticket data and is the authoritative ticket record.
+      // Creating another document here caused every purchase to appear twice:
+      //   1 selected seat = 1 seat-lock ticket + 1 normal ticket = 2 tickets.
+      //
+      // Keep exactly ONE Firestore ticket document per selected seat.
+      showBookingPopup(
+        `✅ ${quantity} ticket${quantity === 1 ? '' : 's'} generated successfully. Selected seat${quantity === 1 ? '' : 's'} remain booked until the session ends.`,
+        'Ticket generated'
+      );
+
+      // Confirm that the tickets were saved and tell the customer where
+      // they can find them after completing the purchase.
+      setTimeout(() => {
+        showBookingPopup(
+          `🎟️ Your ticket${quantity === 1 ? ' is' : 's are'} saved in My Tickets. Open My Tickets to view your ticket${quantity === 1 ? '' : 's'}, session time, seat${quantity === 1 ? '' : 's'}, expiry time, and QR code.`, 
+          'Tickets saved successfully'
+        );
+      }, 450);
+
+      if (typeof window.pulseRefreshLiveSeats === 'function') {
+        await window.pulseRefreshLiveSeats();
+      }
+
+      if (typeof loadMyTickets === 'function') {
+        setTimeout(() => loadMyTickets(), 300);
+      }
+
+    } catch (error) {
+      console.error('Ticket generation failed:', error);
+
+      const message = String(error?.message || error || '');
+
+      showBookingPopup(
+        message.includes('already booked')
+          ? `⚠️ ${message} Please select another available seat.`
+          : `⚠️ ${message || 'Could not generate the ticket. Please try again.'}`,
+        message.includes('already booked')
+          ? 'Seat already booked'
+          : 'Ticket generation failed'
+      );
+
+      if (typeof window.pulseRefreshLiveSeats === 'function') {
+        await window.pulseRefreshLiveSeats();
+      }
+
+    } finally {
+      window.__ticketGenerating = false;
+
+      if (payButton) {
+        payButton.disabled = false;
+        payButton.textContent = oldButtonText;
+      }
     }
-
-    switchView('myTickets');
-
-    // Refresh tickets immediately if the page provides a loader.
-    const generationNotice = document.getElementById('ticketsListContainer');
-    if (generationNotice && typeof loadMyTickets !== 'function') {
-      generationNotice.innerHTML = '<p>Ticket generated successfully.</p>';
-    }
-
-    // Refresh tickets immediately if the page provides a loader.
-    if (typeof loadMyTickets === 'function') {
-      setTimeout(() => loadMyTickets(), 0);
-    }
-
-  } catch (err) {
-    console.error('Ticket generation failed:', err);
-
-    // Always unlock/reset the button on failure.
-    window.__ticketGenerating = false;
-    window.__pulseGenerating = false;
-    if (payButton) {
-      payButton.disabled = false;
-      payButton.removeAttribute('data-busy');
-      payButton.textContent = 'Confirm Demo Payment — Generate Ticket';
-    }
-
-    showBookingPopup(`⚠️ ${err?.message || 'Booking could not be completed. Please try again.'}`, 'Booking could not be completed');
   }
-}
 
   // Render only active/unused tickets. Used tickets remain in Firestore
   // for admin history but disappear from the customer's active ticket list.
@@ -2633,7 +2964,9 @@
           const safePlan = String(ticket.planName || '').replace(/[<>&"]/g, '');
           const safeName = String(ticket.userName || '').replace(/[<>&"]/g, '');
           const safeDate = String(formatTicketDate(getTicketBookingDate(ticket))).replace(/[<>&"]/g, '');
-          const safeTime = String(ticket.time || 'Not selected').replace(/[<>&"]/g, '');
+          const safeTime = String(
+            ticket.sessionTime || ticket.time || ticket.startTime || 'Not selected'
+          ).replace(/[<>&"]/g, '');
           const safeZone = String(ticket.zone || 'Not selected').replace(/[<>&"]/g, '');
           const safeToken = String(ticket.token || '').replace(/[<>&"]/g, '');
 
@@ -3175,9 +3508,6 @@
       { id: 'session', label: 'session' },
       { id: 'zone', label: 'zone' },
       { id: 'ticketZone', label: 'zone' },
-      { id: 'quantity', label: 'number of people' },
-      { id: 'people', label: 'number of people' },
-      { id: 'ticketQuantity', label: 'number of people' }
     ];
 
     const seen = new Set();
@@ -3223,12 +3553,27 @@
       window.selectedZone ||
       '';
 
-    const quantity = Number(
+    const selectedSeats =
+      typeof window.__pulseGetPrimarySelectedPCs === 'function'
+        ? window.__pulseGetPrimarySelectedPCs()
+        : (Array.isArray(window.__pulseSelectedPCs)
+            ? window.__pulseSelectedPCs
+            : []);
+
+    const quantity = selectedSeats.length || Number(
       document.getElementById('quantity')?.value ||
       document.getElementById('people')?.value ||
       document.getElementById('ticketQuantity')?.value ||
-      1
+      0
     );
+
+    if (!selectedSeats.length) {
+      showBookingPopup(
+        '⚠️ Please select at least one available seat before paying for your ticket.',
+        'Please select a seat'
+      );
+      return false;
+    }
 
     if (!bookingDate || !time || !zone) return false;
 
@@ -3487,14 +3832,30 @@
 
   function parseTimePart(timeText) {
     if (!timeText) return null;
-    const match = String(timeText).trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+
+    const raw = String(timeText).trim();
+
+    // Support both the stored 24-hour value (19:00) and the displayed
+    // 12-hour value (7:00 PM).
+    let match = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (match) {
+      const hour = Number(match[1]);
+      const minute = Number(match[2]);
+      if (hour > 23 || minute > 59) return null;
+      return { hour, minute };
+    }
+
+    match = raw.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
     if (!match) return null;
+
     let hour = Number(match[1]);
     const minute = Number(match[2] || 0);
     const meridiem = match[3].toUpperCase();
+
+    if (hour < 1 || hour > 12 || minute > 59) return null;
     if (hour === 12) hour = 0;
     if (meridiem === 'PM') hour += 12;
-    if (hour > 23 || minute > 59) return null;
+
     return { hour, minute };
   }
 
@@ -3799,6 +4160,525 @@ document.addEventListener('click', async (event) => {
   }
 }, true);
 </script>
+
+
+<script id="pulse-smooth-seat-js">
+(function(){
+  const PCS=Array.from({length:10},(_,i)=>`PC${String(i+1).padStart(2,'0')}`);
+  let booked=new Set();
+  let selected=new Set();
+
+  const $=id=>document.getElementById(id);
+
+  function vals(){
+    return {
+      date:String($('passDateInput')?.value||'').trim(),
+      time:String($('passTimeInput')?.value||'').trim(),
+      zone:String($('zoneSelect')?.value||'').trim()
+    };
+  }
+
+  function syncSelection(){
+    selected.forEach(pc=>{
+      if(booked.has(pc)) selected.delete(pc);
+    });
+
+    const list=[...selected];
+    window.__pulseSelectedPCs=list;
+    window.__pulseSelectedPC=list[0]||null;
+
+    try{
+      localStorage.setItem('pulseSelectedPCs',JSON.stringify(list));
+    }catch(_){}
+
+    // If the existing booking form has a PC/seat field, keep it synchronized.
+    ['pcSelect','computerSelect','seatSelect','pcNumber','selectedPc','selectedSeats'].forEach(id=>{
+      const el=$(id);
+      if(!el)return;
+      const value=el.tagName==='SELECT' && el.multiple ? list : (list.join(', '));
+      if(el.tagName==='SELECT' && el.multiple){
+        [...el.options].forEach(o=>o.selected=list.includes(o.value));
+      }else{
+        el.value=value;
+      }
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      el.dispatchEvent(new Event('change',{bubbles:true}));
+    });
+  }
+
+  function render(){
+    const grid=$('pulseSmoothGrid');
+    const summary=$('pulseSmoothSummary');
+    const remain=$('pulseRemainingSeats');
+    const selectedEl=$('pulseSelectedSeats');
+    if(!grid)return;
+
+    const v=vals();
+
+    if(!v.date||!v.time||!v.zone){
+      selected.clear();
+      grid.innerHTML=PCS.map(pc=>
+        `<button type="button" class="pulse-smooth-pc" disabled>
+          ${pc}<br><small>Select options</small>
+        </button>`).join('');
+      if(summary)summary.textContent='Select options';
+      if(remain)remain.textContent='—';
+      if(selectedEl)selectedEl.textContent='0';
+      return;
+    }
+
+    syncSelection();
+
+    const available=PCS.filter(pc=>!booked.has(pc)).length;
+    if(summary)summary.textContent=`${available}/10 available`;
+    if(remain)remain.textContent=String(available);
+    if(selectedEl)selectedEl.textContent=String(selected.size);
+
+    grid.innerHTML=PCS.map(pc=>{
+      const b=booked.has(pc);
+      const s=selected.has(pc);
+      return `<button type="button"
+        class="pulse-smooth-pc ${b?'booked':''} ${s?'selected':''}"
+        ${b?'disabled':''}
+        data-pc="${pc}">
+        ${b?'🔴':s?'🔵':'🟢'} ${pc}<br>
+        <small>${b?'Booked':s?'Selected':'Available'}</small>
+      </button>`;
+    }).join('');
+
+    grid.querySelectorAll('[data-pc]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const pc=btn.dataset.pc;
+        if(booked.has(pc))return;
+
+        if(selected.has(pc)) selected.delete(pc);
+        else selected.add(pc);
+
+        syncSelection();
+
+        const note=$('pulseSmoothNote');
+        if(note){
+          note.textContent=selected.size
+            ? `${selected.size} seat${selected.size===1?'':'s'} selected: ${[...selected].join(', ')}`
+            : 'Select one or more available PCs.';
+        }
+        render();
+      });
+    });
+  }
+
+  async function refresh(){
+    const v=vals();
+
+    if(!v.date||!v.time||!v.zone){
+      booked=new Set();
+      render();
+      return;
+    }
+
+    try{
+      const api=await window.__forgeAuthReady;
+      const {db,collection,getDocs,query,where}=api;
+
+      const q=query(
+        collection(db,'tickets'),
+        where('bookingDate','==',v.date),
+        where('startTime','==',v.time),
+        where('zone','==',v.zone)
+      );
+
+      const snap=await getDocs(q);
+      booked=new Set();
+
+      snap.docs.forEach(d=>{
+        const t=d.data()||{};
+        const status=String(t.ticketStatus||'').toUpperCase();
+
+        // Seats stay booked until the session end.
+        if(status==='CANCELLED' || status==='EXPIRED')return;
+        if(t.expiresAt){
+          const expiry=new Date(t.expiresAt).getTime();
+          if(Number.isFinite(expiry) && expiry<=Date.now())return;
+        }
+
+        // Support several possible field names.
+        const raw=t.pcNumbers||t.pcNumber||t.pcs||t.pc||t.computer||t.seats||t.seat||t.seatNumber;
+        if(!raw)return;
+
+        const values=Array.isArray(raw)
+          ? raw
+          : String(raw).split(/[,\s]+/).filter(Boolean);
+
+        values.forEach(value=>{
+          const m=String(value).toUpperCase().replace(/\s+/g,'').match(/(?:PC)?0*(\d{1,2})$/);
+          if(m){
+            const n=Number(m[1]);
+            if(n>=1&&n<=10)booked.add(`PC${String(n).padStart(2,'0')}`);
+          }
+        });
+      });
+
+      // Remove seats that became booked while user was selecting.
+      selected.forEach(pc=>{
+        if(booked.has(pc))selected.delete(pc);
+      });
+
+      render();
+
+      const note=$('pulseSmoothNote');
+      if(note && selected.size===0) note.textContent='Live status updated. Select available seats. Booked seats remain unavailable until the session ends.';
+    }catch(err){
+      console.error('Live seat status:',err);
+      render();
+      const note=$('pulseSmoothNote');
+      if(note)note.textContent='Could not update live seats. Please try again.';
+    }
+  }
+
+  window.pulseRefreshLiveSeats=refresh;
+  
+  window.__pulseSeatSelection = selected;
+  window.__pulseGetSelectedPCs = function(){
+    return Array.from(selected);
+  };
+  window.__pulseSetSelectedPCs = function(values){
+    selected.clear();
+    (Array.isArray(values) ? values : []).forEach(v => {
+      if (v) selected.add(v);
+    });
+    try {
+      localStorage.setItem('pulseSelectedPCs', JSON.stringify(Array.from(selected)));
+    } catch (_) {}
+    render();
+    return Array.from(selected);
+  };
+  window.pulseGetSelectedPCs = window.__pulseGetSelectedPCs;
+
+  window.pulseGetSelectedPCs=()=>[...selected];
+  window.__pulseSelectedPCs = [...selected];
+  window.pulseGetSelectedPC=()=>[...selected][0]||null;
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    try{
+      const saved=JSON.parse(localStorage.getItem('pulseSelectedPCs')||'[]');
+      if(Array.isArray(saved))selected = new Set(saved);
+    }catch(_){}
+
+    ['passDateInput','passTimeInput','zoneSelect'].forEach(id=>{
+      const el=$(id);
+      el?.addEventListener('change',()=>{
+        selected.clear();
+        setTimeout(refresh,100);
+      });
+      el?.addEventListener('input',()=>{
+        selected.clear();
+        setTimeout(refresh,100);
+      });
+    });
+
+    setTimeout(refresh,600);
+    setInterval(()=>{
+      if(document.visibilityState==='visible')refresh();
+    },10000);
+  });
+})();
+</script>
+
+
+<script id="pulse-seat-quantity-sync">
+(function(){
+  function getSelectedCount(){
+    const pcs = Array.isArray(window.__pulseSelectedPCs) ? window.__pulseSelectedPCs : [];
+    return pcs.length || 1;
+  }
+
+  function syncQuantity(){
+    const count = getSelectedCount();
+    ['quantity','people','ticketQuantity'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){
+        el.value=String(count || 1);
+        el.setAttribute('value',String(count));
+      }
+    });
+    window.__pulseTicketQuantity = count;
+  }
+
+  window.pulseGetTicketQuantity = getSelectedCount;
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    syncQuantity();
+    setInterval(syncQuantity,300);
+  });
+})();
+</script>
+
+
+
+<script id="pulse-primary-seat-api">
+(function(){
+  function getPrimarySeats(){
+    try {
+      const primary = window.__pulseSeatSelection;
+      if (primary && typeof primary[Symbol.iterator] === 'function') {
+        return [...primary].filter(Boolean);
+      }
+    } catch (_) {}
+
+    const saved = window.__pulseSelectedPCs;
+    return Array.isArray(saved) ? [...saved].filter(Boolean) : [];
+  }
+
+  window.__pulseGetPrimarySelectedPCs = getPrimarySeats;
+  window.pulseGetPrimarySelectedPCs = getPrimarySeats;
+})();
+</script>
+
+<script id="pulse-payment-live-seats-js">
+(function(){
+  const PCS=Array.from({length:10},(_,i)=>`PC${String(i+1).padStart(2,'0')}`);
+  let booked=new Set(), selected=new Set();
+  const $=id=>document.getElementById(id);
+
+  function vals(){
+    return {
+      date:String($('passDateInput')?.value||'').trim(),
+      time:String($('passTimeInput')?.value||'').trim(),
+      zone:String($('zoneSelect')?.value||'').trim()
+    };
+  }
+
+  function sync(){
+    const list=[...selected];
+    // Do NOT overwrite the primary seat selection here.
+    // The primary seat picker owns window.__pulseSelectedPCs.
+    window.__pulseTicketQuantity =
+      typeof window.__pulseGetPrimarySelectedPCs === 'function'
+        ? window.__pulseGetPrimarySelectedPCs().length
+        : list.length;
+    document.dispatchEvent(new CustomEvent('pulseSeatsChanged',{detail:{seats:list,quantity:list.length}}));
+
+    // Keep hidden/internal quantity fields synchronized without showing them.
+    ['quantity','people','ticketQuantity'].forEach(id=>{
+      const el=$(id);
+      if(el) el.value=String(Math.max(1,list.length));
+    });
+
+    // Keep any existing PC field synchronized.
+    ['pcSelect','computerSelect','seatSelect','pcNumber','selectedPc','selectedSeats'].forEach(id=>{
+      const el=$(id);
+      if(!el)return;
+      if(el.multiple) [...el.options].forEach(o=>o.selected=list.includes(o.value));
+      else el.value=list.join(', ');
+      el.dispatchEvent(new Event('change',{bubbles:true}));
+    });
+  }
+
+  function render(){
+    const grid=$('plsGrid'), rem=$('plsRemaining'), sel=$('plsSelected');
+    if(!grid)return;
+    const v=vals();
+
+    if(!v.date||!v.time||!v.zone){
+      grid.innerHTML=PCS.map(pc=>`<button class="pls-seat" disabled>${pc}<small>Select options first</small></button>`).join('');
+      if(rem)rem.textContent='—';
+      if(sel)sel.textContent='0';
+      return;
+    }
+
+    selected.forEach(pc=>{if(booked.has(pc))selected.delete(pc)});
+    sync();
+
+    const available=PCS.length-booked.size;
+    if(rem)rem.textContent=available;
+    if(sel)sel.textContent=selected.size;
+
+    grid.innerHTML=PCS.map(pc=>{
+      const b=booked.has(pc), s=selected.has(pc);
+      return `<button type="button" class="pls-seat ${b?'booked':''} ${s?'selected':''}" ${b?'disabled':''} data-pc="${pc}">
+        ${b?'🔴':s?'🔵':'🟢'} ${pc}<small>${b?'Booked':s?'Selected':'Available'}</small>
+      </button>`;
+    }).join('');
+
+    grid.querySelectorAll('[data-pc]').forEach(btn=>{
+      btn.onclick = function(e){
+        e.preventDefault();
+        e.stopPropagation();
+
+        const pc = btn.dataset.pc;
+        if(!pc || booked.has(pc)) return;
+
+        if(selected.has(pc)){
+          selected.delete(pc);
+        }else{
+          if(selected.size >= 10){
+            const msg=$('plsMessage');
+            if(msg) msg.textContent='Maximum 10 seats can be selected.';
+            return;
+          }
+          selected.add(pc);
+        }
+
+        // Synchronize every representation immediately.
+        window.__pulseSelectedPCs = Array.from(selected);
+        window.__pulseSelectedPC = Array.from(selected)[0] || null;
+        window.__pulseTicketQuantity = selected.size;
+
+        try {
+          localStorage.setItem(
+            'pulseSelectedPCs',
+            JSON.stringify(Array.from(selected))
+          );
+        } catch(_) {}
+
+        render();
+
+        const msg=$('plsMessage');
+        if(msg){
+          msg.textContent = selected.size
+            ? `${selected.size} seat${selected.size===1?'':'s'} selected • ${Array.from(selected).join(', ')}`
+            : 'Select one or more available PCs.';
+        }
+      };
+    });
+  }
+
+  async function refresh(){
+    const v=vals();
+    if(!v.date||!v.time||!v.zone){booked=new Set();render();return;}
+    try{
+      const api=await window.__forgeAuthReady;
+      const {db,collection,getDocs,query,where}=api;
+      const q=query(collection(db,'tickets'),
+        where('bookingDate','==',v.date),
+        where('startTime','==',v.time),
+        where('zone','==',v.zone));
+      const snap=await getDocs(q);
+      booked=new Set();
+
+      snap.docs.forEach(d=>{
+        const t=d.data()||{};
+        if(String(t.ticketStatus||'').toUpperCase()==='USED')return;
+        const raw=t.pcNumbers||t.pcNumber||t.pcs||t.pc||t.computer||t.seats||t.seat||t.seatNumber;
+        if(!raw)return;
+        (Array.isArray(raw)?raw:String(raw).split(/[,\s]+/)).forEach(value=>{
+          const m=String(value).toUpperCase().replace(/\s+/g,'').match(/(?:PC)?0*(\d{1,2})$/);
+          if(m){const n=Number(m[1]);if(n>=1&&n<=10)booked.add(`PC${String(n).padStart(2,'0')}`);}
+        });
+      });
+
+      selected.forEach(pc=>{if(booked.has(pc))selected.delete(pc)});
+      render();
+      const msg=$('plsMessage');
+      if(msg && !selected.size)msg.textContent='Live status updated • select available seats.';
+    }catch(e){
+      console.error('Live seat status:',e);
+      render();
+      const msg=$('plsMessage');
+      if(msg)msg.textContent='Live status temporarily unavailable.';
+    }
+  }
+
+  window.pulseRefreshLiveSeats=refresh;
+
+  // IMPORTANT: never create a second source of truth for selected seats.
+  // The main seat picker owns the selection. Payment reads from it.
+  window.pulseGetPaymentSelectedPCs = function(){
+    return typeof window.__pulseGetPrimarySelectedPCs === 'function'
+      ? window.__pulseGetPrimarySelectedPCs()
+      : [];
+  };
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    ['passDateInput','passTimeInput','zoneSelect'].forEach(id=>{
+      const el=$(id);
+      el?.addEventListener('change',()=>{selected.clear();setTimeout(refresh,100)});
+      el?.addEventListener('input',()=>setTimeout(refresh,100));
+    });
+    setTimeout(refresh,600);
+    setInterval(()=>{if(document.visibilityState==='visible')refresh()},10000);
+  });
+})();
+</script>
+
+
+<script id="pulse-seat-price-sync">
+(function(){
+  function selectedCount(){
+    return Array.isArray(window.__pulseSelectedPCs) ? window.__pulseSelectedPCs.length : 0;
+  }
+  function planPrice(){
+    const p=window.currentSelectedPlan;
+    if(p && Number.isFinite(Number(p.price))) return Number(p.price);
+    const badge=document.getElementById('selectedPlanBadge');
+    const m=badge?.textContent?.match(/Rs\.?\s*([\d,]+)/i);
+    return m ? Number(m[1].replace(/,/g,'')) : 0;
+  }
+  function update(){
+    const n=selectedCount(), price=planPrice(), total=n*price;
+    const totalEl=document.getElementById('plsTotal');
+    if(totalEl) totalEl.textContent=`Rs. ${total.toLocaleString()}`;
+    // Keep any existing checkout totals in sync without changing their layout.
+    ['ticketQuantity','quantity','people'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.value=String(Math.max(1,n));
+    });
+    ['totalAmount','paymentTotal','checkoutTotal','grandTotal'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el && n>0) el.textContent=`Rs. ${total.toLocaleString()}`;
+    });
+    window.__pulsePaymentTotal=total;
+    window.__pulseSelectedCount=n;
+  }
+  window.pulseUpdateSeatPrice=update;
+  document.addEventListener('pulseSeatsChanged',update);
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(update,700));
+})();
+</script>
+
+
+<script id="pulse-seat-selection-bridge">
+(function(){
+  const original = window.__pulseSelectedPCs;
+  let seatSet = new Set(Array.isArray(original) ? original : []);
+
+  Object.defineProperty(window, '__pulseSelectedPCs', {
+    configurable: true,
+    get(){ return [...seatSet]; },
+    set(value){
+      seatSet = new Set(Array.isArray(value) ? value.filter(Boolean) : []);
+      try {
+        localStorage.setItem('pulseSelectedPCs', JSON.stringify([...seatSet]));
+      } catch(_){}
+    }
+  });
+
+  window.__pulseSetSelectedPCs = function(values){
+    seatSet = new Set(Array.isArray(values) ? values.filter(Boolean) : []);
+    try {
+      localStorage.setItem('pulseSelectedPCs', JSON.stringify([...seatSet]));
+    } catch(_){}
+    return [...seatSet];
+  };
+
+  window.__pulseAddSelectedPC = function(pc){
+    if(pc) seatSet.add(pc);
+    try {
+      localStorage.setItem('pulseSelectedPCs', JSON.stringify([...seatSet]));
+    } catch(_){}
+    return [...seatSet];
+  };
+
+  window.__pulseRemoveSelectedPC = function(pc){
+    seatSet.delete(pc);
+    try {
+      localStorage.setItem('pulseSelectedPCs', JSON.stringify([...seatSet]));
+    } catch(_){}
+    return [...seatSet];
+  };
+})();
+</script>
+
 </body>
 </html>
 </script>
