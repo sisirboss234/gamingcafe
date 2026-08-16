@@ -3226,7 +3226,7 @@ button, input, select, textarea { max-width: 100%; }
           expiresAt,
 
           qrUrl:
-            `https://quickchart.io/qr?text=${encodeURIComponent(`PULSE-${tokenBase}`)}&size=200`,
+            `https://quickchart.io/qr?text=${encodeURIComponent(`PULSE-${tokenBase.toUpperCase()}`)}&size=200`,
 
           createdAt: serverTimestamp()
         };
@@ -3783,6 +3783,23 @@ button, input, select, textarea { max-width: 100%; }
   }
 
   async function handleScannedTicket(token) {
+    // Normalize whatever the QR scanner returns. Some QR readers return the
+    // raw PULSE token, while older QR images/readers may return the QuickChart
+    // URL or URL-encoded text. Extract the actual ticket token first.
+    token = String(token || '').trim();
+    try {
+      if (/^https?:\/\//i.test(token)) {
+        const url = new URL(token);
+        const embedded = url.searchParams.get('text');
+        if (embedded) token = embedded;
+      }
+    } catch (_) {}
+
+    try {
+      token = decodeURIComponent(token);
+    } catch (_) {}
+    token = token.replace(/^PULSE[:\s_-]*/i, 'PULSE-').trim().toUpperCase();
+
     // Scanner must validate the current ticket before allowing entry.
 
     if (!token) return;
@@ -3809,20 +3826,39 @@ button, input, select, textarea { max-width: 100%; }
       }
 
       try {
-        const q = query(
+        // First try the indexed token query. Then fall back to a staff-side
+        // document scan so older tickets, legacy QR formats, or tokens stored
+        // with different casing cannot incorrectly appear as "invalid".
+        let snapshot = await getDocs(query(
           collection(db, "tickets"),
           where("token", "==", token)
-        );
+        ));
 
-        const snapshot = await getDocs(q);
+        let ticketDoc = snapshot.empty ? null : snapshot.docs[0];
 
-        if (snapshot.empty) {
+        if (!ticketDoc) {
+          const allTickets = await getDocs(collection(db, "tickets"));
+          const normalizedTarget = token.replace(/[^A-Z0-9_-]/g, '');
+          ticketDoc = allTickets.docs.find(d => {
+            const data = d.data() || {};
+            const candidates = [
+              data.token,
+              data.ticketToken,
+              data.qrToken,
+              d.id
+            ].filter(Boolean);
+            return candidates.some(value =>
+              String(value).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') === normalizedTarget
+            );
+          }) || null;
+        }
+
+        if (!ticketDoc) {
           result.className = 'scan-error';
           result.innerHTML = '<strong>❌ INVALID TICKET</strong><br>Ticket was not found.';
           return;
         }
 
-        const ticketDoc = snapshot.docs[0];
         const ticket = ticketDoc.data();
         if (ticket.paymentStatus !== "PAID") {
           result.className = 'scan-error';
@@ -5512,6 +5548,32 @@ body.pulse-auth-initialized.pulse-user-logged-in #navRightLoggedIn{display:flex!
  body.pulse-auth-initialized.pulse-user-logged-in .nav.mobile-menu-open #navRightLoggedIn .pulse-notification-bell{display:flex!important;width:100%!important;min-width:0!important;height:44px!important;justify-content:flex-start!important;padding-left:8px!important}
 }
 </style>
+
+<style id="pulse-staff-portal-visibility-final">
+/* FINAL: Staff Portal is visible ONLY to explicitly authorized staff emails. */
+#navStaffPortalLink { display: none !important; }
+body.pulse-staff-authorized #navStaffPortalLink { display: inline-flex !important; }
+@media (max-width: 900px) {
+  #navStaffPortalLink { display: none !important; }
+  body.pulse-staff-authorized #navStaffPortalLink { display: flex !important; width: 100% !important; min-height: 44px; align-items: center; justify-content: flex-start; }
+}
+</style>
+<script>
+(function(){
+  function enforceStaffPortalVisibility(){
+    const link=document.getElementById('navStaffPortalLink');
+    if(!link) return;
+    const authorized=document.body.classList.contains('pulse-staff-authorized');
+    link.style.setProperty('display', authorized ? 'inline-flex' : 'none', 'important');
+  }
+  const obs=new MutationObserver(enforceStaffPortalVisibility);
+  obs.observe(document.body,{attributes:true,attributeFilter:['class']});
+  document.addEventListener('DOMContentLoaded',enforceStaffPortalVisibility);
+  setTimeout(enforceStaffPortalVisibility,0);
+  setTimeout(enforceStaffPortalVisibility,500);
+  setTimeout(enforceStaffPortalVisibility,1500);
+})();
+</script>
 </body>
 </html>
 </script>
