@@ -1931,6 +1931,54 @@ button, input, select, textarea { max-width: 100%; }
 }
 </style>
 
+
+<style id="pulse-ticket-notification-styles">
+  .pulse-notification-bell{
+    position:relative;display:inline-flex;align-items:center;justify-content:center;
+    width:42px;height:42px;padding:0;border:1px solid var(--line);border-radius:12px;
+    background:rgba(255,255,255,.035);color:var(--bone);cursor:pointer;
+    transition:transform .18s ease,border-color .18s ease,background .18s ease;
+  }
+  .pulse-notification-bell:hover{transform:translateY(-1px);border-color:var(--cyan);background:rgba(0,242,254,.08)}
+  .pulse-bell-icon{font-size:18px;line-height:1}
+  .pulse-notification-count{
+    position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;padding:0 5px;
+    display:flex;align-items:center;justify-content:center;border-radius:999px;
+    background:#ff4d6d;color:#fff;font:800 10px/1 Inter,sans-serif;
+    border:2px solid #0b0f16;box-sizing:border-box;
+  }
+  .pulse-notification-panel{
+    position:fixed;z-index:5000;top:78px;right:22px;width:min(390px,calc(100vw - 28px));
+    max-height:min(600px,calc(100vh - 100px));overflow:hidden;display:none;
+    border:1px solid rgba(0,242,254,.28);border-radius:18px;
+    background:linear-gradient(145deg,rgba(13,18,27,.98),rgba(8,12,18,.98));
+    box-shadow:0 24px 70px rgba(0,0,0,.45),0 0 30px rgba(0,242,254,.08);
+    backdrop-filter:blur(16px);
+  }
+  .pulse-notification-panel.open{display:flex;flex-direction:column}
+  .pulse-notification-panel-head{display:flex;justify-content:space-between;gap:14px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .pulse-notification-panel-head strong{display:block;color:var(--cyan);font:700 18px Oswald,sans-serif;letter-spacing:.05em;text-transform:uppercase}
+  .pulse-notification-panel-head small{display:block;margin-top:3px;color:var(--bone-dim);font-size:11px;line-height:1.4}
+  .pulse-notification-close{border:0;background:transparent;color:var(--bone-dim);font-size:25px;line-height:1;cursor:pointer;padding:0 2px}
+  .pulse-notification-list{overflow:auto;padding:10px}
+  .pulse-notification-empty{padding:26px 14px;text-align:center;color:var(--bone-dim);font-size:12px}
+  .pulse-notification-item{padding:14px;margin:0 0 8px;border:1px solid rgba(0,242,254,.15);border-radius:13px;background:rgba(0,242,254,.045)}
+  .pulse-notification-item:last-child{margin-bottom:0}
+  .pulse-notification-item-title{display:flex;align-items:center;gap:8px;color:#fff;font-weight:800;font-size:13px}
+  .pulse-notification-item-title .dot{width:8px;height:8px;border-radius:50%;background:#00ff88;box-shadow:0 0 10px rgba(0,255,136,.45);flex:0 0 auto}
+  .pulse-notification-item-text{margin-top:7px;color:#c6d0dc;font-size:12px;line-height:1.55}
+  .pulse-notification-item-time{margin-top:8px;color:var(--cyan);font-size:11px;font-weight:800}
+  .pulse-notification-panel-foot{padding:10px;border-top:1px solid var(--line)}
+  .pulse-browser-alert-btn{width:100%;border:1px solid rgba(0,242,254,.28);border-radius:10px;padding:10px 12px;background:rgba(0,242,254,.06);color:var(--cyan);font-weight:800;font-size:11px;cursor:pointer}
+  .pulse-browser-alert-btn:disabled{opacity:.55;cursor:default}
+  .pulse-notification-bell.has-alert{animation:pulseBell 1.8s ease-in-out infinite}
+  @keyframes pulseBell{0%,100%{box-shadow:0 0 0 0 rgba(0,242,254,0)}50%{box-shadow:0 0 0 6px rgba(0,242,254,.10)}}
+  @media (max-width:700px){
+    .pulse-notification-panel{top:68px;right:10px;width:calc(100vw - 20px);max-height:calc(100vh - 82px)}
+    .pulse-notification-bell{width:38px;height:38px}
+  }
+</style>
+
 </head>
 <body>
 
@@ -1955,12 +2003,33 @@ button, input, select, textarea { max-width: 100%; }
     </div>
     <div class="nav-right" id="navRightLoggedIn" style="display:none;">
       <button class="nav-login" id="navStaffPortalLink" style="display:none;" onclick="openStaffPortal()">Staff Portal</button>
+      <button class="pulse-notification-bell" id="pulseNotificationBell" type="button" onclick="togglePulseNotifications()" aria-label="Ticket notifications" title="Ticket notifications">
+        <span class="pulse-bell-icon">🔔</span>
+        <span class="pulse-notification-count" id="pulseNotificationCount" style="display:none;">0</span>
+      </button>
       <span class="nav-member" id="navMemberName">Hi, Gamer</span>
       <button class="nav-login" id="navLogoutBtn">Log Out</button>
     </div>
     <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
   </nav>
 </header>
+
+<!-- ================= TICKET NOTIFICATION PANEL ================= -->
+<div class="pulse-notification-panel" id="pulseNotificationPanel" aria-hidden="true">
+  <div class="pulse-notification-panel-head">
+    <div>
+      <strong>Ticket Alerts</strong>
+      <small>Session reminders for your purchased tickets</small>
+    </div>
+    <button type="button" class="pulse-notification-close" onclick="togglePulseNotifications(false)" aria-label="Close">×</button>
+  </div>
+  <div id="pulseNotificationList" class="pulse-notification-list">
+    <div class="pulse-notification-empty">No ticket reminders right now.</div>
+  </div>
+  <div class="pulse-notification-panel-foot">
+    <button type="button" class="pulse-browser-alert-btn" id="pulseBrowserAlertBtn" onclick="enablePulseBrowserAlerts()">Enable browser alerts</button>
+  </div>
+</div>
 
 <!-- ================= MAIN HOME PAGE VIEW ================= -->
 <div id="homeView" class="view-section active-view">
@@ -4032,6 +4101,9 @@ button, input, select, textarea { max-width: 100%; }
       const navStaffPortalLink = document.getElementById('navStaffPortalLink');
 
       if (user) {
+        // Start the 30-minute ticket reminder watcher for this signed-in account.
+        startPulseTicketReminderWatcher(user.uid);
+
         // Reload the Auth profile so the latest displayName selected at signup is used.
         try { await user.reload(); } catch (reloadError) { console.warn('Could not reload user profile:', reloadError); }
         const currentUser = auth.currentUser || user;
@@ -4054,6 +4126,7 @@ button, input, select, textarea { max-width: 100%; }
         if (startTrialBtn) startTrialBtn.textContent = 'View Rates';
         if (heroBookBtn) heroBookBtn.textContent = 'Reserve a Rig';
       } else {
+        stopPulseTicketReminderWatcher();
         if (loggedOutNav) loggedOutNav.style.display = 'flex';
         if (loggedInNav) loggedInNav.style.display = 'none';
         if (navMyTicketsLink) navMyTicketsLink.style.display = 'none';
@@ -4496,6 +4569,217 @@ button, input, select, textarea { max-width: 100%; }
     if (Number.isNaN(result.getTime())) return null;
     result.setHours(start.hour, start.minute, 0, 0);
     return result;
+  }
+
+  // ================= TICKET REMINDERS (30 MINUTES BEFORE SESSION) =================
+  // Reminders are calculated from the exact sessionStartAt/startTime stored on the ticket.
+  // The in-account alert appears automatically while the user is signed in.
+  // Browser notifications are optional and require the user to grant permission.
+  let pulseReminderTimer = null;
+  let pulseReminderUserId = null;
+  const PULSE_REMINDER_WINDOW_MS = 30 * 60 * 1000;
+
+  function pulseReminderStorageKey(userId, ticketId) {
+    return `pulse_ticket_reminder_${userId}_${ticketId}`;
+  }
+
+  function formatReminderClock(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function formatReminderDate(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function togglePulseNotifications(force) {
+    const panel = document.getElementById('pulseNotificationPanel');
+    if (!panel) return;
+    const shouldOpen = typeof force === 'boolean' ? force : !panel.classList.contains('open');
+    panel.classList.toggle('open', shouldOpen);
+    panel.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+  }
+
+  function updatePulseBrowserAlertButton() {
+    const btn = document.getElementById('pulseBrowserAlertBtn');
+    if (!btn) return;
+    if (!('Notification' in window)) {
+      btn.textContent = 'Browser alerts not supported';
+      btn.disabled = true;
+    } else if (Notification.permission === 'granted') {
+      btn.textContent = '✓ Browser alerts enabled';
+      btn.disabled = true;
+    } else if (Notification.permission === 'denied') {
+      btn.textContent = 'Browser alerts blocked';
+      btn.disabled = true;
+    } else {
+      btn.textContent = 'Enable browser alerts';
+      btn.disabled = false;
+    }
+  }
+
+  async function enablePulseBrowserAlerts() {
+    if (!('Notification' in window)) return;
+    try {
+      const permission = await Notification.requestPermission();
+      updatePulseBrowserAlertButton();
+      if (permission === 'granted') {
+        showBookingPopup('🔔 Browser alerts are enabled. You will be notified 30 minutes before your session.', 'Alerts enabled');
+      }
+    } catch (err) {
+      console.warn('Browser notification permission failed:', err);
+    }
+  }
+
+  // Play a short attention sound when a 30-minute reminder is triggered.
+  // Web Audio is used so no extra audio file is required. Browsers may block
+  // sound until the user has interacted with the page at least once.
+  let pulseReminderAudioContext = null;
+  function playPulseReminderSound() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!pulseReminderAudioContext) pulseReminderAudioContext = new AudioCtx();
+      const ctx = pulseReminderAudioContext;
+      const play = () => {
+        const now = ctx.currentTime;
+        [0, 0.22, 0.44].forEach((offset, index) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(index === 1 ? 880 : 660, now + offset);
+          gain.gain.setValueAtTime(0.0001, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.16, now + offset + 0.025);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.16);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.18);
+        });
+      };
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(play).catch(() => {});
+      } else {
+        play();
+      }
+    } catch (err) {
+      console.warn('Reminder sound failed:', err);
+    }
+  }
+
+  function showPulseBrowserNotification(title, body, ticketId) {
+    // Play the sound for the in-page reminder as well as the browser alert.
+    playPulseReminderSound();
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      const n = new Notification(title, {
+        body,
+        tag: `pulse-session-${ticketId}`,
+        icon: 'https://quickchart.io/qr?text=PULSE&size=128'
+      });
+      n.onclick = () => {
+        try { window.focus(); } catch (_) {}
+        switchView('myTickets');
+        n.close();
+      };
+    } catch (err) {
+      console.warn('Browser notification failed:', err);
+    }
+  }
+
+  function renderPulseReminders(reminders) {
+    const list = document.getElementById('pulseNotificationList');
+    const count = document.getElementById('pulseNotificationCount');
+    const bell = document.getElementById('pulseNotificationBell');
+    if (!list || !count || !bell) return;
+
+    count.textContent = String(reminders.length);
+    count.style.display = reminders.length ? 'flex' : 'none';
+    bell.classList.toggle('has-alert', reminders.length > 0);
+
+    if (!reminders.length) {
+      list.innerHTML = '<div class="pulse-notification-empty">No ticket reminders right now.</div>';
+      updatePulseBrowserAlertButton();
+      return;
+    }
+
+    list.innerHTML = reminders.map(r => `
+      <div class="pulse-notification-item">
+        <div class="pulse-notification-item-title"><span class="dot"></span>${r.planName || 'PULSE Ticket'} starts soon</div>
+        <div class="pulse-notification-item-text">Your ${r.planName || 'gaming'} session is scheduled for <strong>${r.timeLabel}</strong> at ${r.zone || 'your selected zone'}.</div>
+        <div class="pulse-notification-item-time">${r.dateLabel} • Starts at ${r.timeLabel}</div>
+      </div>
+    `).join('');
+    updatePulseBrowserAlertButton();
+  }
+
+  async function checkPulseTicketReminders() {
+    if (!pulseReminderUserId) return;
+    try {
+      const { db, collection, getDocs, query, where } = await window.__forgeAuthReady;
+      const snapshot = await getDocs(query(collection(db, 'tickets'), where('userId', '==', pulseReminderUserId)));
+      const now = Date.now();
+      const reminders = [];
+
+      snapshot.docs.forEach(d => {
+        const ticket = d.data() || {};
+        const status = String(ticket.ticketStatus || '').toUpperCase();
+        if (status === 'USED' || status === 'CANCELLED' || status === 'EXPIRED') return;
+
+        const start = getSessionStartDate(ticket);
+        if (!start) return;
+
+        const diff = start.getTime() - now;
+        // Show the reminder during the 30-minute window before the session.
+        // A small grace window keeps the reminder visible if the timer checks a few seconds late.
+        if (diff > 0 && diff <= PULSE_REMINDER_WINDOW_MS + 15000) {
+          const timeLabel = ticket.startTime
+            ? formatTimeLabel(ticket.startTime)
+            : formatReminderClock(start);
+          reminders.push({
+            id: d.id,
+            planName: String(ticket.planName || 'PULSE Ticket'),
+            zone: String(ticket.zone || 'your selected zone'),
+            timeLabel,
+            dateLabel: formatReminderDate(start),
+            start
+          });
+
+          const sentKey = pulseReminderStorageKey(pulseReminderUserId, d.id);
+          const alreadySent = localStorage.getItem(sentKey) === '1';
+          if (!alreadySent) {
+            localStorage.setItem(sentKey, '1');
+            showPulseBrowserNotification(
+              `🔔 Your PULSE session starts at ${timeLabel}`,
+              `${ticket.planName || 'Gaming session'} starts in 30 minutes. Zone: ${ticket.zone || 'selected zone'}.`,
+              d.id
+            );
+          }
+        }
+      });
+
+      reminders.sort((a, b) => a.start - b.start);
+      renderPulseReminders(reminders);
+    } catch (err) {
+      console.warn('Ticket reminder check failed:', err);
+    }
+  }
+
+  function startPulseTicketReminderWatcher(userId) {
+    if (pulseReminderTimer) clearInterval(pulseReminderTimer);
+    pulseReminderUserId = userId || null;
+    updatePulseBrowserAlertButton();
+    if (!pulseReminderUserId) return;
+    checkPulseTicketReminders();
+    pulseReminderTimer = setInterval(checkPulseTicketReminders, 30000);
+  }
+
+  function stopPulseTicketReminderWatcher() {
+    if (pulseReminderTimer) clearInterval(pulseReminderTimer);
+    pulseReminderTimer = null;
+    pulseReminderUserId = null;
+    renderPulseReminders([]);
   }
 
   function getSessionEndDate(ticket) {
