@@ -1045,6 +1045,51 @@ window.__forgeAuthReady = Promise.resolve({
     width: 100%;
   }
 
+
+    /* Mobile: keep the ticket notification bell visible in the top navigation. */
+    @media (max-width: 900px) {
+      body.pulse-user-logged-in #navRightLoggedIn {
+        display: flex !important;
+        width: auto !important;
+        flex-basis: auto !important;
+        margin-left: auto;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 7px;
+        padding: 0;
+        border: 0;
+        order: 2;
+      }
+      body.pulse-user-logged-in #navRightLoggedIn .pulse-notification-bell {
+        display: inline-flex !important;
+        width: 42px;
+        min-width: 42px;
+        height: 42px;
+      }
+      body.pulse-user-logged-in #navRightLoggedIn .nav-member,
+      body.pulse-user-logged-in #navRightLoggedIn #navLogoutBtn,
+      body.pulse-user-logged-in #navRightLoggedIn #navStaffPortalLink {
+        display: none !important;
+      }
+      .nav.mobile-menu-open #navRightLoggedIn {
+        width: 100% !important;
+        flex-basis: 100% !important;
+        margin-left: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 10px 0 14px;
+        border-top: 1px solid var(--line);
+      }
+      .nav.mobile-menu-open #navRightLoggedIn .pulse-notification-bell {
+        width: 100%;
+        min-width: 0;
+        height: 44px;
+        justify-content: flex-start;
+        padding-left: 8px;
+      }
+    }
+
   /* ---------- Responsive ---------- */
   /* ---------- Responsive / Mobile & Tablet Navigation ---------- */
   @media (max-width: 900px) {
@@ -4099,6 +4144,8 @@ button, input, select, textarea { max-width: 100%; }
       const heroBookBtn = document.getElementById('heroBookBtn');
       const navMyTicketsLink = document.getElementById('navMyTicketsLink');
       const navStaffPortalLink = document.getElementById('navStaffPortalLink');
+
+      document.body.classList.toggle('pulse-user-logged-in', !!user);
 
       if (user) {
         // Start the 30-minute ticket reminder watcher for this signed-in account.
