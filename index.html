@@ -2446,25 +2446,15 @@ button, input, select, textarea { max-width: 100%; }
 
         <!-- Payment QR Options -->
         
-<div id="pulsePaymentLiveSeats" class="pulse-payment-live-seats" aria-live="polite">
-  <div class="pls-head">
-    <div>
-      <strong>💺 Live Seat Status</strong>
-      <small>Select the available PCs you want to book</small>
-    </div>
-    <div class="pls-summary">
-      <span>Remaining <b id="plsRemaining">—</b></span>
-      <span>Selected <b id="plsSelected">0</b></span>
-      <span>Total <b id="plsTotal">Rs. 0</b></span>
-    </div>
+<div id="pulsePaymentLiveSeats" class="pulse-smooth-card pulse-payment-live-seats" aria-live="polite">
+  <div class="pulse-smooth-head">
+    <div><strong>💺 Select Your Seats</strong><small>Green = available · Red = booked · Blue = selected</small></div>
+    <div id="pulseSmoothSummary" class="pulse-smooth-summary">Select date, session and zone</div>
   </div>
-  <div id="plsGrid" class="pls-grid"></div>
-  <div class="pls-legend">
-    <span><i class="pls-dot"></i>Available</span>
-    <span><i class="pls-dot booked"></i>Booked</span>
-    <span><i class="pls-dot selected"></i>Selected</span>
-  </div>
-  <div id="plsMessage" class="pls-message">Select date, time and zone to see live seats.</div>
+  <div class="pulse-seat-stats"><span>🪑 Remaining: <b id="pulseRemainingSeats">—</b></span><span>🎟️ Selected: <b id="pulseSelectedSeats">0</b></span><span>💺 Total: <b>10</b></span></div>
+  <div id="pulseSmoothGrid" class="pulse-smooth-grid" aria-label="Available gaming seats"></div>
+  <div class="pulse-smooth-legend"><span><i class="pulse-smooth-dot"></i> Available</span><span><i class="pulse-smooth-dot red"></i> Booked</span><span><i class="pulse-smooth-dot blue"></i> Selected</span></div>
+  <div id="pulseSmoothNote" class="pulse-smooth-note">Select date, time and zone to choose your seats.</div>
 </div>
 
 <div class="payment-options">
@@ -5094,7 +5084,7 @@ document.addEventListener('click', async (event) => {
   const PCS=Array.from({length:10},(_,i)=>`PC${String(i+1).padStart(2,'0')}`);
   let booked=new Set();
   let selected=new Set();
-
+  let liveMode='tickets';
   const $=id=>document.getElementById(id);
 
   function vals(){
@@ -5105,32 +5095,55 @@ document.addEventListener('click', async (event) => {
     };
   }
 
-  function syncSelection(){
-    selected.forEach(pc=>{
-      if(booked.has(pc)) selected.delete(pc);
-    });
+  function normalizeSeat(value){
+    const m=String(value||'').toUpperCase().replace(/\s+/g,'').match(/(?:PC)?0*(\d{1,2})$/);
+    if(!m)return null;
+    const n=Number(m[1]);
+    return n>=1&&n<=10?`PC${String(n).padStart(2,'0')}`:null;
+  }
 
+  function normalizeTime(value){
+    const raw=String(value||'').trim();
+    const m=raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if(!m)return raw;
+    let h=Number(m[1]), min=Number(m[2]);
+    const ap=(m[3]||'').toUpperCase();
+    if(ap==='AM'&&h===12)h=0;
+    if(ap==='PM'&&h!==12)h+=12;
+    return `${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
+  }
+
+  function normalizeZone(value){
+    return String(value||'').trim().toUpperCase().replace(/\s+/g,' ');
+  }
+
+  function ticketMatches(t,v){
+    const date=String(t.bookingDate||t.date||'').trim();
+    const time=normalizeTime(t.startTime||t.time||t.sessionTime||t.session||'');
+    const zone=normalizeZone(t.zone||t.selectedZone||'');
+    return date===v.date && time===normalizeTime(v.time) && zone===normalizeZone(v.zone);
+  }
+
+  function addTicketSeats(t){
+    const status=String(t.ticketStatus||'').toUpperCase();
+    const payment=String(t.paymentStatus||'').toUpperCase();
+    if(payment && payment!=='PAID')return;
+    if(status==='CANCELLED'||status==='EXPIRED'||status==='REFUNDED'||status==='USED')return;
+    if(t.expiresAt){
+      const expiry=new Date(t.expiresAt).getTime();
+      if(Number.isFinite(expiry)&&expiry<=Date.now())return;
+    }
+    const raw=t.pcNumbers||t.pcNumber||t.pcs||t.pc||t.computer||t.seats||t.seat||t.seatNumber;
+    const values=Array.isArray(raw)?raw:String(raw||'').split(/[,\s]+/).filter(Boolean);
+    values.forEach(v=>{const pc=normalizeSeat(v);if(pc)booked.add(pc);});
+  }
+
+  function syncSelection(){
+    selected.forEach(pc=>{if(booked.has(pc))selected.delete(pc);});
     const list=[...selected];
     window.__pulseSelectedPCs=list;
     window.__pulseSelectedPC=list[0]||null;
-
-    try{
-      localStorage.setItem('pulseSelectedPCs',JSON.stringify(list));
-    }catch(_){}
-
-    // If the existing booking form has a PC/seat field, keep it synchronized.
-    ['pcSelect','computerSelect','seatSelect','pcNumber','selectedPc','selectedSeats'].forEach(id=>{
-      const el=$(id);
-      if(!el)return;
-      const value=el.tagName==='SELECT' && el.multiple ? list : (list.join(', '));
-      if(el.tagName==='SELECT' && el.multiple){
-        [...el.options].forEach(o=>o.selected=list.includes(o.value));
-      }else{
-        el.value=value;
-      }
-      el.dispatchEvent(new Event('input',{bubbles:true}));
-      el.dispatchEvent(new Event('change',{bubbles:true}));
-    });
+    try{localStorage.setItem('pulseSelectedPCs',JSON.stringify(list));}catch(_){ }
   }
 
   function render(){
@@ -5139,15 +5152,11 @@ document.addEventListener('click', async (event) => {
     const remain=$('pulseRemainingSeats');
     const selectedEl=$('pulseSelectedSeats');
     if(!grid)return;
-
     const v=vals();
 
     if(!v.date||!v.time||!v.zone){
       selected.clear();
-      grid.innerHTML=PCS.map(pc=>
-        `<button type="button" class="pulse-smooth-pc" disabled>
-          ${pc}<br><small>Select options</small>
-        </button>`).join('');
+      grid.innerHTML=PCS.map(pc=>`<button type="button" class="pulse-smooth-pc" disabled>${pc}<br><small>Select options</small></button>`).join('');
       if(summary)summary.textContent='Select options';
       if(remain)remain.textContent='—';
       if(selectedEl)selectedEl.textContent='0';
@@ -5155,158 +5164,108 @@ document.addEventListener('click', async (event) => {
     }
 
     syncSelection();
-
     const available=PCS.filter(pc=>!booked.has(pc)).length;
     if(summary)summary.textContent=`${available}/10 available`;
     if(remain)remain.textContent=String(available);
     if(selectedEl)selectedEl.textContent=String(selected.size);
 
     grid.innerHTML=PCS.map(pc=>{
-      const b=booked.has(pc);
-      const s=selected.has(pc);
-      return `<button type="button"
-        class="pulse-smooth-pc ${b?'booked':''} ${s?'selected':''}"
-        ${b?'disabled':''}
-        data-pc="${pc}">
-        ${b?'🔴':s?'🔵':'🟢'} ${pc}<br>
-        <small>${b?'Booked':s?'Selected':'Available'}</small>
-      </button>`;
+      const b=booked.has(pc), sel=selected.has(pc);
+      return `<button type="button" class="pulse-smooth-pc ${b?'booked':''} ${sel?'selected':''}" ${b?'disabled':''} data-pc="${pc}">${b?'🔴':sel?'🔵':'🟢'} ${pc}<br><small>${b?'Booked':sel?'Selected':'Available'}</small></button>`;
     }).join('');
 
-    grid.querySelectorAll('[data-pc]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        const pc=btn.dataset.pc;
-        if(booked.has(pc))return;
+    grid.querySelectorAll('[data-pc]').forEach(btn=>btn.addEventListener('click',()=>{
+      const pc=btn.dataset.pc;
+      if(!pc||booked.has(pc))return;
+      if(selected.has(pc))selected.delete(pc); else selected.add(pc);
+      syncSelection();
+      const note=$('pulseSmoothNote');
+      if(note)note.textContent=selected.size?`${selected.size} seat${selected.size===1?'':'s'} selected: ${[...selected].join(', ')}`:'Select one or more available PCs.';
+      render();
+    }));
+  }
 
-        if(selected.has(pc)) selected.delete(pc);
-        else selected.add(pc);
+  async function readBookedSeats(v){
+    const api=await window.__forgeAuthReady;
+    const {db,collection,getDocs,query,where,getDoc}=api;
+    booked=new Set();
 
-        syncSelection();
+    // First try the efficient indexed query used by current tickets.
+    try{
+      const q=query(collection(db,'tickets'),where('bookingDate','==',v.date),where('startTime','==',v.time),where('zone','==',v.zone));
+      const snap=await getDocs(q);
+      snap.docs.forEach(d=>addTicketSeats(d.data()||{}));
+      liveMode='tickets';
+      return;
+    }catch(firstError){
+      console.warn('Seat query failed; trying full ticket read:',firstError);
+    }
 
-        const note=$('pulseSmoothNote');
-        if(note){
-          note.textContent=selected.size
-            ? `${selected.size} seat${selected.size===1?'':'s'} selected: ${[...selected].join(', ')}`
-            : 'Select one or more available PCs.';
-        }
-        render();
-      });
-    });
+    // Fallback for older ticket formats that use different time fields.
+    try{
+      const snap=await getDocs(collection(db,'tickets'));
+      snap.docs.forEach(d=>{const t=d.data()||{};if(ticketMatches(t,v))addTicketSeats(t);});
+      liveMode='tickets-fallback';
+      return;
+    }catch(allTicketsError){
+      console.warn('Ticket availability read failed:',allTicketsError);
+    }
+
+    // Last fallback: a shared seat counter can expose bookedSeats without
+    // requiring customers to read other customers' ticket documents.
+    try{
+      const key=`${v.date}__${normalizeTime(v.time)}__${normalizeZone(v.zone)}`;
+      const safeId=encodeURIComponent(key).replace(/%/g,'_');
+      const counterSnap=await getDoc(window.__pulseDoc(db,'seatCounters',safeId));
+      if(counterSnap.exists()){
+        const data=counterSnap.data()||{};
+        const list=Array.isArray(data.bookedSeats)?data.bookedSeats:[];
+        list.forEach(v=>{const pc=normalizeSeat(v);if(pc)booked.add(pc);});
+        liveMode=list.length?'counter-seats':'counter-count';
+        return;
+      }
+    }catch(counterError){
+      console.warn('Seat counter read failed:',counterError);
+    }
+
+    throw new Error('Live seat data is not readable with the current Firebase permissions.');
   }
 
   async function refresh(){
     const v=vals();
-
-    if(!v.date||!v.time||!v.zone){
-      booked=new Set();
-      render();
-      return;
-    }
-
+    if(!v.date||!v.time||!v.zone){booked=new Set();render();return;}
     try{
-      const api=await window.__forgeAuthReady;
-      const {db,collection,getDocs,query,where}=api;
-
-      const q=query(
-        collection(db,'tickets'),
-        where('bookingDate','==',v.date),
-        where('startTime','==',v.time),
-        where('zone','==',v.zone)
-      );
-
-      const snap=await getDocs(q);
-      booked=new Set();
-
-      snap.docs.forEach(d=>{
-        const t=d.data()||{};
-        const status=String(t.ticketStatus||'').toUpperCase();
-
-        // Seats stay booked until the session end.
-        if(status==='CANCELLED' || status==='EXPIRED')return;
-        if(t.expiresAt){
-          const expiry=new Date(t.expiresAt).getTime();
-          if(Number.isFinite(expiry) && expiry<=Date.now())return;
-        }
-
-        // Support several possible field names.
-        const raw=t.pcNumbers||t.pcNumber||t.pcs||t.pc||t.computer||t.seats||t.seat||t.seatNumber;
-        if(!raw)return;
-
-        const values=Array.isArray(raw)
-          ? raw
-          : String(raw).split(/[,\s]+/).filter(Boolean);
-
-        values.forEach(value=>{
-          const m=String(value).toUpperCase().replace(/\s+/g,'').match(/(?:PC)?0*(\d{1,2})$/);
-          if(m){
-            const n=Number(m[1]);
-            if(n>=1&&n<=10)booked.add(`PC${String(n).padStart(2,'0')}`);
-          }
-        });
-      });
-
-      // Remove seats that became booked while user was selecting.
-      selected.forEach(pc=>{
-        if(booked.has(pc))selected.delete(pc);
-      });
-
+      await readBookedSeats(v);
+      selected.forEach(pc=>{if(booked.has(pc))selected.delete(pc);});
       render();
-
       const note=$('pulseSmoothNote');
-      if(note && selected.size===0) note.textContent='Live status updated. Select available seats. Booked seats remain unavailable until the session ends.';
+      if(note)note.textContent=`Live status updated • ${PCS.length-booked.size}/10 available${liveMode==='counter-count'?' • seat details limited by permissions':''}.`;
     }catch(err){
       console.error('Live seat status:',err);
       render();
       const note=$('pulseSmoothNote');
-      if(note)note.textContent='Could not update live seats. Please try again.';
+      if(note)note.textContent='Live seat status is unavailable. Please check Firebase seat/ticket read permissions.';
     }
   }
 
   window.pulseRefreshLiveSeats=refresh;
-  
-  window.__pulseSeatSelection = selected;
-  window.__pulseGetSelectedPCs = function(){
-    return Array.from(selected);
-  };
-  window.__pulseSetSelectedPCs = function(values){
-    selected.clear();
-    (Array.isArray(values) ? values : []).forEach(v => {
-      if (v) selected.add(v);
-    });
-    try {
-      localStorage.setItem('pulseSelectedPCs', JSON.stringify(Array.from(selected)));
-    } catch (_) {}
-    render();
-    return Array.from(selected);
-  };
-  window.pulseGetSelectedPCs = window.__pulseGetSelectedPCs;
-
-  window.pulseGetSelectedPCs=()=>[...selected];
-  window.__pulseSelectedPCs = [...selected];
+  window.__pulseSeatSelection=selected;
+  window.__pulseGetSelectedPCs=()=>[...selected];
+  window.pulseGetSelectedPCs=window.__pulseGetSelectedPCs;
+  window.__pulseSetSelectedPCs=values=>{selected.clear();(Array.isArray(values)?values:[]).forEach(v=>{const pc=normalizeSeat(v);if(pc&&!booked.has(pc))selected.add(pc);});syncSelection();render();return [...selected];};
+  window.__pulseGetPrimarySelectedPCs=()=>[...selected];
+  window.pulseGetPrimarySelectedPCs=window.__pulseGetPrimarySelectedPCs;
   window.pulseGetSelectedPC=()=>[...selected][0]||null;
 
   document.addEventListener('DOMContentLoaded',()=>{
-    try{
-      const saved=JSON.parse(localStorage.getItem('pulseSelectedPCs')||'[]');
-      if(Array.isArray(saved))selected = new Set(saved);
-    }catch(_){}
-
+    try{const saved=JSON.parse(localStorage.getItem('pulseSelectedPCs')||'[]');if(Array.isArray(saved))selected=new Set(saved.map(normalizeSeat).filter(Boolean));}catch(_){ }
     ['passDateInput','passTimeInput','zoneSelect'].forEach(id=>{
       const el=$(id);
-      el?.addEventListener('change',()=>{
-        selected.clear();
-        setTimeout(refresh,100);
-      });
-      el?.addEventListener('input',()=>{
-        selected.clear();
-        setTimeout(refresh,100);
-      });
+      el?.addEventListener('change',()=>{selected.clear();setTimeout(refresh,80);});
+      el?.addEventListener('input',()=>setTimeout(refresh,80));
     });
-
-    setTimeout(refresh,600);
-    setInterval(()=>{
-      if(document.visibilityState==='visible')refresh();
-    },10000);
+    setTimeout(refresh,500);
+    setInterval(()=>{if(document.visibilityState==='visible')refresh();},5000);
   });
 })();
 </script>
@@ -5361,172 +5320,7 @@ document.addEventListener('click', async (event) => {
 })();
 </script>
 
-<script id="pulse-payment-live-seats-js">
-(function(){
-  const PCS=Array.from({length:10},(_,i)=>`PC${String(i+1).padStart(2,'0')}`);
-  let booked=new Set(), selected=new Set();
-  const $=id=>document.getElementById(id);
 
-  function vals(){
-    return {
-      date:String($('passDateInput')?.value||'').trim(),
-      time:String($('passTimeInput')?.value||'').trim(),
-      zone:String($('zoneSelect')?.value||'').trim()
-    };
-  }
-
-  function sync(){
-    const list=[...selected];
-    // Do NOT overwrite the primary seat selection here.
-    // The primary seat picker owns window.__pulseSelectedPCs.
-    window.__pulseTicketQuantity =
-      typeof window.__pulseGetPrimarySelectedPCs === 'function'
-        ? window.__pulseGetPrimarySelectedPCs().length
-        : list.length;
-    document.dispatchEvent(new CustomEvent('pulseSeatsChanged',{detail:{seats:list,quantity:list.length}}));
-
-    // Keep hidden/internal quantity fields synchronized without showing them.
-    ['quantity','people','ticketQuantity'].forEach(id=>{
-      const el=$(id);
-      if(el) el.value=String(Math.max(1,list.length));
-    });
-
-    // Keep any existing PC field synchronized.
-    ['pcSelect','computerSelect','seatSelect','pcNumber','selectedPc','selectedSeats'].forEach(id=>{
-      const el=$(id);
-      if(!el)return;
-      if(el.multiple) [...el.options].forEach(o=>o.selected=list.includes(o.value));
-      else el.value=list.join(', ');
-      el.dispatchEvent(new Event('change',{bubbles:true}));
-    });
-  }
-
-  function render(){
-    const grid=$('plsGrid'), rem=$('plsRemaining'), sel=$('plsSelected');
-    if(!grid)return;
-    const v=vals();
-
-    if(!v.date||!v.time||!v.zone){
-      grid.innerHTML=PCS.map(pc=>`<button class="pls-seat" disabled>${pc}<small>Select options first</small></button>`).join('');
-      if(rem)rem.textContent='—';
-      if(sel)sel.textContent='0';
-      return;
-    }
-
-    selected.forEach(pc=>{if(booked.has(pc))selected.delete(pc)});
-    sync();
-
-    const available=PCS.length-booked.size;
-    if(rem)rem.textContent=available;
-    if(sel)sel.textContent=selected.size;
-
-    grid.innerHTML=PCS.map(pc=>{
-      const b=booked.has(pc), s=selected.has(pc);
-      return `<button type="button" class="pls-seat ${b?'booked':''} ${s?'selected':''}" ${b?'disabled':''} data-pc="${pc}">
-        ${b?'🔴':s?'🔵':'🟢'} ${pc}<small>${b?'Booked':s?'Selected':'Available'}</small>
-      </button>`;
-    }).join('');
-
-    grid.querySelectorAll('[data-pc]').forEach(btn=>{
-      btn.onclick = function(e){
-        e.preventDefault();
-        e.stopPropagation();
-
-        const pc = btn.dataset.pc;
-        if(!pc || booked.has(pc)) return;
-
-        if(selected.has(pc)){
-          selected.delete(pc);
-        }else{
-          if(selected.size >= 10){
-            const msg=$('plsMessage');
-            if(msg) msg.textContent='Maximum 10 seats can be selected.';
-            return;
-          }
-          selected.add(pc);
-        }
-
-        // Synchronize every representation immediately.
-        window.__pulseSelectedPCs = Array.from(selected);
-        window.__pulseSelectedPC = Array.from(selected)[0] || null;
-        window.__pulseTicketQuantity = selected.size;
-
-        try {
-          localStorage.setItem(
-            'pulseSelectedPCs',
-            JSON.stringify(Array.from(selected))
-          );
-        } catch(_) {}
-
-        render();
-
-        const msg=$('plsMessage');
-        if(msg){
-          msg.textContent = selected.size
-            ? `${selected.size} seat${selected.size===1?'':'s'} selected • ${Array.from(selected).join(', ')}`
-            : 'Select one or more available PCs.';
-        }
-      };
-    });
-  }
-
-  async function refresh(){
-    const v=vals();
-    if(!v.date||!v.time||!v.zone){booked=new Set();render();return;}
-    try{
-      const api=await window.__forgeAuthReady;
-      const {db,collection,getDocs,query,where}=api;
-      const q=query(collection(db,'tickets'),
-        where('bookingDate','==',v.date),
-        where('startTime','==',v.time),
-        where('zone','==',v.zone));
-      const snap=await getDocs(q);
-      booked=new Set();
-
-      snap.docs.forEach(d=>{
-        const t=d.data()||{};
-        if(String(t.ticketStatus||'').toUpperCase()==='USED')return;
-        const raw=t.pcNumbers||t.pcNumber||t.pcs||t.pc||t.computer||t.seats||t.seat||t.seatNumber;
-        if(!raw)return;
-        (Array.isArray(raw)?raw:String(raw).split(/[,\s]+/)).forEach(value=>{
-          const m=String(value).toUpperCase().replace(/\s+/g,'').match(/(?:PC)?0*(\d{1,2})$/);
-          if(m){const n=Number(m[1]);if(n>=1&&n<=10)booked.add(`PC${String(n).padStart(2,'0')}`);}
-        });
-      });
-
-      selected.forEach(pc=>{if(booked.has(pc))selected.delete(pc)});
-      render();
-      const msg=$('plsMessage');
-      if(msg && !selected.size)msg.textContent='Live status updated • select available seats.';
-    }catch(e){
-      console.error('Live seat status:',e);
-      render();
-      const msg=$('plsMessage');
-      if(msg)msg.textContent='Live status temporarily unavailable.';
-    }
-  }
-
-  window.pulseRefreshLiveSeats=refresh;
-
-  // IMPORTANT: never create a second source of truth for selected seats.
-  // The main seat picker owns the selection. Payment reads from it.
-  window.pulseGetPaymentSelectedPCs = function(){
-    return typeof window.__pulseGetPrimarySelectedPCs === 'function'
-      ? window.__pulseGetPrimarySelectedPCs()
-      : [];
-  };
-
-  document.addEventListener('DOMContentLoaded',()=>{
-    ['passDateInput','passTimeInput','zoneSelect'].forEach(id=>{
-      const el=$(id);
-      el?.addEventListener('change',()=>{selected.clear();setTimeout(refresh,100)});
-      el?.addEventListener('input',()=>setTimeout(refresh,100));
-    });
-    setTimeout(refresh,600);
-    setInterval(()=>{if(document.visibilityState==='visible')refresh()},10000);
-  });
-})();
-</script>
 
 
 <script id="pulse-seat-price-sync">
