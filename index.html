@@ -57,12 +57,48 @@
   const auth = getAuth(firebaseApp);
   const db = getFirestore(firebaseApp);
 
+  // Keep a stable copy of the Firebase auth state for UI actions.
+  // Some browsers can briefly return null from auth.currentUser while
+  // Firebase restores persistence, even though the user is already signed in.
+  window.__pulseAuthUser = null;
+  window.__pulseAuthInitialized = false;
+
+
   // Expose Firestore document-reference helper to the non-module app code.
   // This avoids cross-script scope errors such as "__pulseDoc is not a function".
   window.__pulseDoc = doc;
   window.__forgeDoc = doc;
 
-  window.__forgeAuthReady = Promise.resolve({
+  
+  // Reliable Firebase Auth readiness helper.
+  // Firebase may still be restoring the signed-in user when checkout starts.
+  window.__pulseWaitForAuthUser = async function (timeoutMs = 8000) {
+    const api = await window.__forgeAuthReady;
+    const { auth, onAuthStateChanged } = api;
+
+    if (auth.currentUser) return auth.currentUser;
+
+    return await new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        unsubscribe?.();
+        reject(new Error('Please sign in before purchasing a ticket.'));
+      }, timeoutMs);
+
+      const unsubscribe = onAuthStateChanged(auth, user => {
+        if (user && !settled) {
+          settled = true;
+          clearTimeout(timer);
+          unsubscribe?.();
+          resolve(user);
+        }
+      });
+    });
+  };
+
+window.__forgeAuthReady = Promise.resolve({
     auth,
     db,
     collection,
@@ -928,6 +964,46 @@
     display: none !important;
   }
 
+
+  /* Footer displayed at the bottom of the Ticket Records page */
+  .ticket-records-footer {
+    margin-top: 70px;
+    padding: 56px 0 36px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .ticket-records-footer .footer-cols {
+    display: flex;
+    gap: 64px;
+    flex-wrap: wrap;
+  }
+  .ticket-records-footer .footer-col h4 {
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    color: var(--cyan);
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  .ticket-records-footer .footer-col p {
+    display: block;
+    font-size: 14px;
+    color: var(--bone-dim);
+    margin-bottom: 8px;
+  }
+  .ticket-records-footer .footer-bottom {
+    text-align: center;
+    padding-top: 40px;
+    margin-top: 40px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--bone-dim);
+    width: 100%;
+  }
+  @media (max-width: 700px) {
+    .ticket-records-footer { padding-left: 20px; padding-right: 20px; }
+  }
+
   /* ---------- Footer ---------- */
   footer {
     padding: 56px 0 36px;
@@ -1245,7 +1321,105 @@
   }
   .modal-error.is-visible { display: block; }
 
+  /* ---------- Staff Portal ---------- */
+  .staff-portal-page { padding: 60px 0 100px; min-height: 85vh; }
+  .staff-portal-container { max-width: 820px; margin: 0 auto; }
+  .staff-portal-card {
+    background: linear-gradient(145deg, #182033, #10151f);
+    border: 1px solid rgba(0,242,254,.18);
+    border-radius: 16px;
+    padding: 34px;
+    box-shadow: 0 20px 55px rgba(0,0,0,.35);
+  }
+  .staff-portal-card h2 { color: var(--cyan); margin-bottom: 8px; font-size: 32px; }
+  .staff-portal-subtitle { color: var(--bone-dim); margin-bottom: 26px; font-size: 15px; }
+  .staff-portal-tools { display: grid; gap: 12px; }
+  .staff-portal-tool {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 20px;
+    border: 1px solid rgba(0,242,254,.18);
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(0,242,254,.75), rgba(0,179,134,.72));
+    color: #071015;
+    cursor: pointer;
+    text-align: left;
+    transition: transform .2s ease, filter .2s ease, box-shadow .2s ease;
+    font-family: var(--display);
+  }
+  .staff-portal-tool:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+    box-shadow: 0 8px 24px rgba(0,242,254,.18);
+  }
+  .staff-portal-tool-icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: grid;
+    place-items: center;
+    border: 2px solid rgba(255,255,255,.9);
+    border-radius: 8px;
+    color: #fff;
+    font-family: var(--body);
+    font-weight: 700;
+    font-size: 20px;
+  }
+  .staff-portal-tool-copy { flex: 1; }
+  .staff-portal-tool-title {
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .staff-portal-tool-desc {
+    display: block;
+    margin-top: 3px;
+    font-family: var(--body);
+    font-size: 13px;
+    color: rgba(7,16,21,.8);
+  }
+  .staff-portal-tool-arrow { font-size: 28px; line-height: 1; }
+  .staff-portal-note {
+    margin-top: 22px;
+    text-align: center;
+    color: var(--bone-dim);
+    font-size: 13px;
+  }
+  @media(max-width:700px){
+    .staff-portal-card { padding: 24px 18px; }
+    .staff-portal-card h2 { font-size: 27px; }
+    .staff-portal-tool { padding: 16px; }
+  }
+
   /* ---------- Staff Scanner ---------- */
+    .ticket-records-section-title{margin:28px 0 12px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,#111722,#0c1018);display:flex;flex-direction:column;gap:4px}
+  .ticket-records-section-title span{color:var(--cyan);font-family:Oswald,sans-serif;font-size:20px;font-weight:800;letter-spacing:.08em}
+  .ticket-records-section-title small{color:var(--bone-dim);font-size:11px}
+  .staff-dashboard-card{margin-top:22px;padding:22px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,#111722,#0c1018)}
+  .staff-dashboard-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+  .staff-dashboard-head h3{margin:0;color:var(--cyan);font-family:Oswald;letter-spacing:.04em}
+  .staff-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:15px}
+  .staff-stat{padding:13px;border:1px solid var(--line);border-radius:12px;background:#0a0e15}
+  .staff-stat small{color:var(--bone-dim);display:block;font-size:10px}.staff-stat strong{display:block;font-size:25px;margin-top:4px}
+  .staff-day-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+  .staff-day-tab{border:1px solid var(--line);background:#0a0e15;color:var(--bone-dim);padding:8px 11px;border-radius:999px;cursor:pointer;font-size:11px;font-weight:700}
+  .staff-day-tab.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,242,254,.08)}
+  .staff-search{width:100%;padding:11px;border:1px solid var(--line);background:#080b11;color:var(--bone);border-radius:10px;margin-bottom:12px}
+  .staff-ticket-filters{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
+  .staff-filter-group{flex:1;min-width:230px}
+  .staff-filter-group label{display:block;color:var(--bone-dim);font-size:9px;font-weight:800;letter-spacing:.08em;margin:0 0 6px}
+  .staff-filter-select{width:100%;padding:10px 11px;border:1px solid var(--line);background:#080b11;color:var(--bone);border-radius:10px}
+
+  .staff-table-wrap{overflow:auto}.staff-table{width:100%;border-collapse:collapse;min-width:850px}
+  .staff-table th,.staff-table td{padding:9px;border-bottom:1px solid var(--line);font-size:11px;text-align:left}
+  .staff-table th{color:var(--bone-dim);font-size:9px;text-transform:uppercase}
+  .staff-status{padding:4px 7px;border-radius:999px;font-size:9px;font-weight:800}
+  .staff-empty{text-align:center;color:var(--bone-dim);padding:24px}.staff-refresh{font-size:11px}
+  @media(max-width:700px){.staff-stats{grid-template-columns:repeat(2,1fr)}}
   #staffView { background: var(--bg); min-height: 85vh; }
   .staff-page-wrap { padding: 60px 0 100px; }
   .staff-container { max-width: 760px; margin: 0 auto; }
@@ -1370,6 +1544,36 @@
 
   @media (max-width:1100px) { .game-grid{grid-template-columns:repeat(3,1fr);} .zone-detail-grid{grid-template-columns:1fr;} }
   @media (max-width:700px) { .game-grid{grid-template-columns:repeat(2,1fr);} .zone-gallery{grid-template-columns:1fr;} .games-toolbar{display:block;} .game-count{margin-top:12px;} .zone-view-content h1{font-size:48px;} }
+
+  .ticket-records-nav{
+    cursor:pointer;
+    border:0;
+    background:transparent;
+    color:inherit;
+    font:inherit;
+  }
+  .ticket-records-nav:hover{
+    color:var(--cyan);
+  }
+  .top-ticket-records-option{
+    position:fixed;
+    top:18px;
+    right:24px;
+    z-index:9999;
+  }
+  .top-ticket-records-option button{
+    border:1px solid var(--line);
+    background:#0b0f16;
+    color:var(--bone);
+    padding:9px 14px;
+    border-radius:9px;
+    cursor:pointer;
+    font-weight:700;
+  }
+  .top-ticket-records-option button:hover{
+    color:var(--cyan);
+    border-color:var(--cyan);
+  }
 </style>
 <script src="https://unpkg.com/html5-qrcode" defer></script>
 
@@ -1600,6 +1804,133 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
   }
 </style>
 
+
+<style id="pulse-mobile-perfect-fit">
+/* ---------- PULSE responsive foundation ---------- */
+html { overflow-x: hidden; }
+body { max-width: 100%; overflow-x: hidden; }
+*, *::before, *::after { box-sizing: border-box; }
+img, svg, video, canvas { max-width: 100%; }
+button, input, select, textarea { max-width: 100%; }
+
+/* Ticket pages: never let content force the viewport wider than the phone. */
+.tickets-page-wrap, .tickets-container, .ticket-section,
+#ticketRecordsView, #ticketRecordsView .staff-page-wrap,
+#ticketRecordsView .wrap, .staff-dashboard-card,
+.ticket-records-footer { width: 100%; max-width: 100%; min-width: 0; }
+.ticket-section, .staff-dashboard-card { overflow: hidden; }
+
+/* Ticket details remain readable on narrow screens. */
+.ticket-field-value, .ticket-brand, .ticket-status-badge,
+.barcode-display, .staff-table td, .staff-table th {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Desktop/tablet ticket records table keeps full detail without cropping. */
+.staff-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.staff-table { width: 100%; }
+
+@media (max-width: 700px) {
+  body { font-size: 14px; }
+  .wrap { width: 100%; max-width: 100%; padding-left: 14px; padding-right: 14px; }
+
+  /* Ticket list / purchased ticket page */
+  .tickets-page-wrap { padding: 30px 0 60px; }
+  .tickets-container { width: 100%; }
+  .tickets-container h2 { font-size: 29px; line-height: 1.1; }
+  .tickets-container p.subtitle { margin-bottom: 24px; font-size: 13px; }
+  .ticket-section { padding: 18px 14px; margin-bottom: 16px; border-radius: 12px; }
+  .ticket-header { align-items: flex-start; gap: 10px; flex-wrap: wrap; padding-bottom: 12px; margin-bottom: 16px; }
+  .ticket-brand { font-size: 18px; }
+  .ticket-status-badge { font-size: 9px; padding: 4px 7px; }
+  .ticket-body { grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: stretch; }
+  .ticket-info-group { gap: 10px; min-width: 0; }
+  .ticket-field-label { font-size: 9px; }
+  .ticket-field-value { font-size: 14px; line-height: 1.35; }
+  .ticket-visual-code { width: 100%; padding: 12px; }
+  .ticket-visual-code img { width: min(150px, 55vw); height: min(150px, 55vw); }
+  .barcode-display { font-size: 12px; letter-spacing: 2px; }
+
+  /* Ticket records page */
+  .staff-page-wrap { padding: 28px 0 50px; }
+  .back-btn-row { margin-bottom: 14px; }
+  .back-link { min-height: 42px; }
+  .ticket-records-section-title { margin: 12px 0 10px; padding: 14px; }
+  .ticket-records-section-title span { font-size: 18px; }
+  .ticket-records-section-title small { font-size: 10px; line-height: 1.4; }
+  .staff-dashboard-card { margin-top: 14px; padding: 14px; border-radius: 14px; }
+  .staff-dashboard-head { margin-bottom: 12px; gap: 9px; }
+  .staff-dashboard-head h3 { font-size: 18px; }
+  .staff-refresh { min-height: 40px; padding: 9px 12px; }
+  .staff-stats { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+  .staff-stat { padding: 10px 9px; min-width: 0; }
+  .staff-stat small { font-size: 8px; line-height: 1.25; }
+  .staff-stat strong { font-size: 21px; }
+  .staff-ticket-filters { display: grid; grid-template-columns: 1fr; gap: 9px; }
+  .staff-filter-group { min-width: 0; width: 100%; }
+  .staff-day-tabs { gap: 6px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; -webkit-overflow-scrolling: touch; }
+  .staff-day-tab { flex: 0 0 auto; min-height: 38px; }
+  .staff-search, .staff-filter-select { min-height: 44px; font-size: 13px; }
+
+  /* On phones, ticket records become readable cards instead of a cropped 850px table. */
+  .staff-table-wrap { overflow: visible; }
+  .staff-table { min-width: 0 !important; width: 100%; border-collapse: separate; border-spacing: 0; }
+  .staff-table thead { display: none; }
+  .staff-table tbody, .staff-table tr, .staff-table td { display: block; width: 100%; }
+  .staff-table tbody tr {
+    margin: 0 0 12px;
+    padding: 5px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(8,11,17,.72);
+  }
+  .staff-table tbody tr:last-child { margin-bottom: 0; }
+  .staff-table td {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(92px, 34%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    font-size: 12px;
+    line-height: 1.35;
+    text-align: left;
+  }
+  .staff-table td:last-child { border-bottom: none; }
+  .staff-table td::before {
+    content: attr(data-label);
+    color: var(--bone-dim);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+  .staff-table td strong { font-size: 12px; }
+  .staff-status { display: inline-block; width: fit-content; max-width: 100%; }
+
+  /* Footer/contact section remains compact and fully visible. */
+  .ticket-records-footer { margin-top: 35px; padding: 30px 0 24px; }
+  .ticket-records-footer > .wrap { padding-left: 14px !important; padding-right: 14px !important; flex-direction: column; align-items: flex-start !important; gap: 22px !important; }
+  .ticket-records-footer .footer-cols { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .ticket-records-footer .footer-col { min-width: 0; }
+  .ticket-records-footer .footer-col h4 { font-size: 11px; margin-bottom: 9px; }
+  .ticket-records-footer .footer-col p { font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+  .ticket-records-footer .footer-bottom { padding-top: 20px; margin-top: 20px; font-size: 10px; line-height: 1.4; }
+}
+
+@media (max-width: 380px) {
+  .wrap { padding-left: 10px; padding-right: 10px; }
+  .ticket-section { padding: 15px 11px; }
+  .staff-dashboard-card { padding: 11px; }
+  .staff-table tbody tr { padding-left: 10px; padding-right: 10px; }
+  .staff-table td { grid-template-columns: minmax(78px, 36%) minmax(0, 1fr); gap: 7px; font-size: 11px; }
+  .ticket-records-footer .footer-cols { grid-template-columns: 1fr; }
+}
+</style>
+
 </head>
 <body>
 
@@ -1623,7 +1954,7 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
       <button class="nav-cta" id="startTrialBtn" onclick="navigateToSection('rates')">Book Station</button>
     </div>
     <div class="nav-right" id="navRightLoggedIn" style="display:none;">
-      <button class="nav-login" id="navStaffLink" style="display:none;" onclick="openStaffScanner()">Staff Scanner</button>
+      <button class="nav-login" id="navStaffPortalLink" style="display:none;" onclick="openStaffPortal()">Staff Portal</button>
       <span class="nav-member" id="navMemberName">Hi, Gamer</span>
       <button class="nav-login" id="navLogoutBtn">Log Out</button>
     </div>
@@ -2005,12 +2336,50 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
 
 </div>
 
+<!-- ================= STAFF PORTAL PAGE VIEW ================= -->
+<div id="staffPortalView" class="view-section">
+  <div class="staff-portal-page">
+    <div class="wrap">
+      <div class="back-btn-row">
+        <button class="back-link" onclick="switchView('home')">← Back to Arena Overview</button>
+      </div>
+      <div class="staff-portal-container">
+        <div class="staff-portal-card">
+          <h2>Staff Portal</h2>
+          <p class="staff-portal-subtitle">
+            Access staff tools to scan tickets and view ticket records.
+          </p>
+          <div class="staff-portal-tools">
+            <button class="staff-portal-tool" type="button" onclick="openStaffScanner()">
+              <span class="staff-portal-tool-icon">⌁</span>
+              <span class="staff-portal-tool-copy">
+                <span class="staff-portal-tool-title">Staff Entry Scanner</span>
+                <span class="staff-portal-tool-desc">Scan a customer's digital ticket.</span>
+              </span>
+              <span class="staff-portal-tool-arrow">→</span>
+            </button>
+            <button class="staff-portal-tool" type="button" onclick="openStaffTicketRecordsPage()">
+              <span class="staff-portal-tool-icon">▣</span>
+              <span class="staff-portal-tool-copy">
+                <span class="staff-portal-tool-title">Ticket Records</span>
+                <span class="staff-portal-tool-desc">View all scanned ticket records.</span>
+              </span>
+              <span class="staff-portal-tool-arrow">→</span>
+            </button>
+          </div>
+          <div class="staff-portal-note">🔒 Staff access only. All activities are logged.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ================= STAFF QR SCANNER PAGE VIEW ================= -->
 <div id="staffView" class="view-section">
   <div class="staff-page-wrap">
     <div class="wrap">
       <div class="back-btn-row">
-        <button class="back-link" onclick="switchView('home')">← Back to Arena Overview</button>
+        <button class="back-link" onclick="switchView('staffPortal')">← Back to Staff Portal</button>
       </div>
       <div class="staff-container">
         <div class="staff-card">
@@ -2019,6 +2388,7 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
             Scan a customer's digital ticket. The server checks payment, date and whether the ticket was already used.
           </p>
           <div class="staff-email" id="staffSignedInEmail"></div>
+          <div class="staff-actions" style="margin-top:12px;"><button class="action-btn" onclick="switchView('staffPortal')">← Staff Portal</button></div>
           <div id="qr-reader"></div>
           <div id="scanResult">Ready to scan a ticket.</div>
           <div class="staff-actions">
@@ -2026,31 +2396,14 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
             <button class="action-btn" id="stopScannerBtn" onclick="stopStaffScanner()" style="display:none;">Stop Camera</button>
           </div>
         </div>
+
+
       </div>
     </div>
   </div>
 </div>
 
-<footer>
-  <div class="wrap" style="width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 30px;">
-    <div class="logo" onclick="switchView('home')">PUL<span>SE</span></div>
-    <div class="footer-cols">
-      <div class="footer-col">
-        <h4>Location</h4>
-        <p>Thamel, Kathmandu, Nepal</p>
-        <p>Open 24 Hours Daily</p>
-      </div>
-      <div class="footer-col">
-        <h4>Contact</h4>
-        <p>support@pulsearena.com</p>
-        <p>+977 1-4000000</p>
-      </div>
-    </div>
-  </div>
-  <div class="footer-bottom">
-    &copy; 2026 PULSE Esports &amp; Gaming Arena. All rights reserved.
-  </div>
-</footer>
+
 
 <!-- Authentication Modals -->
 <div class="modal-overlay" id="authModal">
@@ -2165,8 +2518,20 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
       document.getElementById('myTicketsView').classList.add('active-view');
       renderUserTickets();
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (viewName === 'staffPortal') {
+      const staffUser = window.__pulseAuthUser;
+      if (!staffUser || !isStaffEmail(staffUser.email)) { alert('Staff access denied.'); return; }
+      document.getElementById('staffPortalView').classList.add('active-view');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (viewName === 'staff') {
+      const staffUser = window.__pulseAuthUser;
+      if (!staffUser || !isStaffEmail(staffUser.email)) { alert('Staff access denied.'); return; }
       document.getElementById('staffView').classList.add('active-view');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (viewName === 'ticketRecords') {
+      const staffUser = window.__pulseAuthUser;
+      if (!staffUser || !isStaffEmail(staffUser.email)) { alert('Staff access denied.'); return; }
+      document.getElementById('ticketRecordsView').classList.add('active-view');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (viewName === 'zoneA') {
       document.getElementById('zoneAView').classList.add('active-view');
@@ -2328,7 +2693,7 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
     if (event.target?.id === 'ticketQuantity') refreshSeatAvailability();
   });
 
-  function selectPassPlan(planName, price, durationHours, isNightOwl) {
+  async function selectPassPlan(planName, price, durationHours, isNightOwl) {
     // Open the payment/checkout section immediately when a pass is clicked.
     // Authentication can still be requested on top of the checkout page.
     currentSelectedPlan = {
@@ -2351,83 +2716,62 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
 
     switchView('checkout');
 
-    // New checkout = new payment identity.
-    const paymentRandom =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : Math.random().toString(36).slice(2) + Date.now().toString(36);
-    window.__pulsePaymentId =
-      'PAY-' + paymentRandom.replace(/-/g, '').toUpperCase();
-
-    // A new purchase starts a completely fresh checkout session.
-    window.__ticketGenerating = false;
-    window.__pulseGenerating = false;
-    window.__forgeAuthReady.then(({ auth }) => {
-      if (!auth.currentUser) {
-        const modal = document.getElementById('authModal');
-        modal.classList.add('is-open');
-        document.getElementById('loginView').style.display = 'block';
-        document.getElementById('signupView').style.display = 'none';
-        document.getElementById('forgotView').style.display = 'none';
-        return;
+    // Firebase can still be restoring an existing login when the user clicks a pass.
+    // Wait briefly before deciding that the user is logged out.
+    let authUser = window.__pulseAuthUser || null;
+    if (!authUser) {
+      try {
+        authUser = await window.__pulseWaitForAuthUser(10000);
+      } catch (_) {
+        authUser = window.__pulseAuthUser || null;
       }
+    }
 
-      currentSelectedPlan = {
-        name: planName,
-        price: price,
-        durationHours: durationHours,
-        isNightOwl: !!isNightOwl
-      };
+    if (!authUser) {
+      // Remember the selected pass so a successful login can continue checkout
+      // automatically instead of forcing the user to click the pass again.
+      window.__pulsePendingPlan = { planName, price, durationHours, isNightOwl: !!isNightOwl };
+      const modal = document.getElementById('authModal');
+      modal.classList.add('is-open');
+      document.getElementById('loginView').style.display = 'block';
+      document.getElementById('signupView').style.display = 'none';
+      document.getElementById('forgotView').style.display = 'none';
+      return;
+    }
 
-      document.getElementById('selectedPlanBadge').childNodes[0].nodeValue =
-        `Selected: ${planName} — Rs. ${price.toLocaleString()} — ${isNightOwl ? '11 PM–6 AM' : durationHours + ' Hours'}`;
+    buildDateOptions();
+    buildTimeOptions();
+    const initialAvailability = document.getElementById('seatAvailability') || document.getElementById('availableSeats');
+    if (initialAvailability) {
+      initialAvailability.innerHTML = `
+        <div class="seat-availability waiting">
+          <strong>🎟️ Check Live Seat Availability</strong>
+          <span>✨ Please select your <b>date, session time and gaming zone</b> above to see booked and remaining seats.</span>
+        </div>`;
+    }
 
-      buildDateOptions();
-      buildTimeOptions();
-      const initialAvailability = document.getElementById('seatAvailability') || document.getElementById('availableSeats');
-      if (initialAvailability) {
-        initialAvailability.innerHTML = `
-          <div class="seat-availability waiting">
-            <strong>🎟️ Check Live Seat Availability</strong>
-            <span>✨ Please select your <b>date, session time and gaming zone</b> above to see booked and remaining seats.</span>
-          </div>`;
-      }
+    // Standard Pass is locked to Zone A. Other passes keep all zones available.
+    const zoneSelect = document.getElementById('zoneSelect');
+    const zoneHint = document.getElementById('zoneHint');
+    const isStandard = planName === 'Standard Pass';
 
-      // Standard Pass is locked to Zone A. Other passes keep all zones available.
-      const zoneSelect = document.getElementById('zoneSelect');
-      const zoneHint = document.getElementById('zoneHint');
-      const isStandard = planName === 'Standard Pass';
+    zoneSelect.innerHTML = isStandard
+      ? '<option value="ZONE A — ESPORTS">Zone A — Esports</option>'
+      : `<option value="">Choose a zone</option>
+         <option value="ZONE A — ESPORTS">Zone A — Esports</option>
+         <option value="ZONE B — CONSOLE">Zone B — Console</option>
+         <option value="ZONE C — IMMERSIVE">Zone C — Immersive</option>`;
 
-      zoneSelect.innerHTML = isStandard
-        ? '<option value="ZONE A — ESPORTS">Zone A — Esports</option>'
-        : `<option value="">Choose a zone</option>
-           <option value="ZONE A — ESPORTS">Zone A — Esports</option>
-           <option value="ZONE B — CONSOLE">Zone B — Console</option>
-           <option value="ZONE C — IMMERSIVE">Zone C — Immersive</option>`;
+    zoneSelect.value = isStandard ? 'ZONE A — ESPORTS' : '';
+    zoneHint.textContent = isStandard ? 'Standard Pass includes Zone A only.' : '';
 
-      zoneSelect.value = isStandard ? 'ZONE A — ESPORTS' : '';
-      zoneHint.textContent = isStandard ? 'Standard Pass includes Zone A only.' : '';
-
-      const quantityInput = document.getElementById('ticketQuantity');
-      quantityInput.value = '1';
-      updateQuantitySummary();
-
-      // Every checkout gets a brand-new payment ID.
-      // This prevents two payments for the same plan/price from sharing a QR.
-      const paymentRandom =
-        typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : Math.random().toString(36).slice(2) + Date.now().toString(36);
-
-      window.__pulsePaymentId =
-        'PAY-' + paymentRandom.replace(/-/g, '').toUpperCase();
-
-      resetCheckoutForNewPurchase();
-      initializePaymentMethod();
-      switchView('checkout');
-      // Load live capacity for the newly selected date/session/zone.
-      setTimeout(() => refreshSeatAvailability(), 0);
-    });
+    const quantityInput = document.getElementById('ticketQuantity');
+    quantityInput.value = '1';
+    updateQuantitySummary();
+    resetCheckoutForNewPurchase();
+    initializePaymentMethod();
+    switchView('checkout');
+    setTimeout(() => refreshSeatAvailability(), 0);
   }
 
   // ---------------- FIRESTORE TICKETS ----------------
@@ -2585,7 +2929,8 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
       const { auth, db, collection, getDocs, query, where,
               runTransaction, doc, serverTimestamp } = api;
 
-      const user = auth.currentUser;
+      let user = window.__pulseAuthUser || auth.currentUser;
+      if (!user) user = await window.__pulseWaitForAuthUser(10000);
       if (!user) throw new Error('Please sign in before purchasing a ticket.');
 
       // ALWAYS re-read the database immediately before purchase.
@@ -2922,7 +3267,15 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
     const container = document.getElementById('ticketsListContainer');
 
     window.__forgeAuthReady.then(async ({ auth, db, collection, getDocs, query, where }) => {
-      const user = auth.currentUser;
+      let user = auth.currentUser;
+
+      if (!user) {
+        try {
+          user = await window.__pulseWaitForAuthUser(5000);
+        } catch (_) {
+          user = null;
+        }
+      }
 
       if (!user) {
         container.innerHTML = `<div class="no-tickets-box"><h3>Please log in to view your tickets.</h3></div>`;
@@ -3035,6 +3388,249 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
         `;
       }
     });
+  }
+
+  // ================= STAFF TICKET DASHBOARD =================
+  let staffDashboardTickets = [];
+  function staffDateForWeekday(weekday) {
+    const now = new Date();
+    const offset = (Number(weekday) - now.getDay() + 7) % 7;
+    const d = new Date(now);
+    d.setDate(d.getDate() + offset);
+    const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+  function staffTicketValue(t,...keys){for(const k of keys)if(t[k]!==undefined&&t[k]!==null&&t[k]!=='')return t[k];return ''}
+  function staffTicketSeat(t){return staffTicketValue(t,'seat','pcNumber','pc','seatNumber')||'—'}
+  function staffTicketStatus(t){return String(t.ticketStatus||'UNUSED').toUpperCase()}
+  function staffTicketAmount(t){const n=Number(staffTicketValue(t,'amount','price','totalAmount')||0);return Number.isFinite(n)?n:0}
+  function staffTicketSafe(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+  function staffTicketDate(t){return String(staffTicketValue(t,'bookingDate','date')||'').slice(0,10)}
+
+  function staffLocalDatePlus(offset){
+    const d=new Date();
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate()+offset);
+    const y=d.getFullYear();
+    const m=String(d.getMonth()+1).padStart(2,'0');
+    const day=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+
+  let staffDashboardDayOffset=0;
+
+  function renderStaffDayTabs(){
+    const box=document.getElementById('staffDayTabs');
+    if(!box)return;
+    const days=[0,1,2].map(offset=>{
+      const d=new Date();
+      d.setHours(0,0,0,0);
+      d.setDate(d.getDate()+offset);
+      return {
+        offset,
+        label:offset===0 ? 'Today' : d.toLocaleDateString('en-US',{weekday:'long'})
+      };
+    });
+    box.innerHTML=days.map(d=>`
+      <button type="button" class="staff-day-tab ${staffDashboardDayOffset===d.offset?'active':''}"
+        onclick="setStaffTicketDay(${d.offset})">${d.label}</button>
+    `).join('');
+  }
+
+  window.setStaffTicketDay=function(offset){
+    staffDashboardDayOffset=Math.max(0,Math.min(2,Number(offset)||0));
+    renderStaffDayTabs();
+    renderStaffTicketDashboard();
+  };
+
+  function renderStaffTicketDashboard(){
+    const q=(document.getElementById('staffTicketSearch')?.value||'').trim().toLowerCase();
+    const zone=(document.getElementById('staffZoneFilter')?.value||'ALL').trim();
+    const selectedDate=staffLocalDatePlus(staffDashboardDayOffset);
+
+    const paid=staffDashboardTickets.filter(t=>
+      String(t.paymentStatus||'PAID').toUpperCase()==='PAID'
+    );
+
+    const rows=paid.filter(t=>{
+      if(staffTicketDate(t)!==selectedDate)return false;
+
+      const ticketZone=String(t.zone||t.selectedZone||'').trim();
+      if(zone!=='ALL' && ticketZone!==zone)return false;
+
+      const hay=[
+        t.userName,t.name,t.fullName,t.customerName,
+        t.userEmail,t.email,t.phone,t.phoneNumber,
+        t.token,t.ticketId,t.id,staffTicketSeat(t),
+        ticketZone,t.planName,t.passName,
+        t.sessionTime,t.time,t.startTime,staffTicketDate(t)
+      ].join(' ').toLowerCase();
+
+      return !q||hay.includes(q);
+    });
+
+    const active=rows.filter(t=>!['USED','CANCELLED','EXPIRED'].includes(staffTicketStatus(t)));
+    const customers=new Set(rows.map(t=>staffTicketValue(t,'userId','userEmail','userName')).filter(Boolean));
+
+    document.getElementById('staffTicketsSold').textContent=rows.length;
+    document.getElementById('staffCustomers').textContent=customers.size;
+    document.getElementById('staffActiveTickets').textContent=active.length;
+    document.getElementById('staffSeatsBooked').textContent=active.length;
+
+    const el=document.getElementById('staffTicketTable');
+    if(!rows.length){
+      el.innerHTML=`<div class="staff-empty">No paid ticket records found for ${selectedDate}${zone!=='ALL'?' in '+staffTicketSafe(zone):''}.</div>`;
+      return;
+    }
+
+    rows.sort((a,b)=>String(staffTicketValue(a,'sessionTime','time','startTime'))
+      .localeCompare(String(staffTicketValue(b,'sessionTime','time','startTime'))));
+
+    el.innerHTML=`<div class="staff-table-wrap"><table class="staff-table"><thead><tr>
+      <th>Customer</th><th>Ticket</th><th>Booking Date</th><th>Pass</th><th>Session</th><th>Zone</th><th>Seat</th><th>Amount</th><th>Status</th>
+    </tr></thead><tbody>${rows.map(t=>{
+      const st=staffTicketStatus(t);
+      return `<tr>
+        <td data-label="Customer"><strong>${staffTicketSafe(staffTicketValue(t,'userName','name','fullName','customerName')||'Gamer')}</strong><br>${staffTicketSafe(staffTicketValue(t,'userEmail','email'))}</td>
+        <td data-label="Ticket">${staffTicketSafe(staffTicketValue(t,'token','ticketId')||t.id)}</td>
+        <td data-label="Booking Date">${staffTicketSafe(staffTicketDate(t)||'—')}</td>
+        <td data-label="Pass">${staffTicketSafe(staffTicketValue(t,'planName','passName')||'—')}</td>
+        <td data-label="Session">${staffTicketSafe(staffTicketValue(t,'sessionTime','time','startTime')||'—')}</td>
+        <td data-label="Zone">${staffTicketSafe(t.zone||t.selectedZone||'—')}</td>
+        <td data-label="Seat">${staffTicketSafe(staffTicketSeat(t))}</td>
+        <td data-label="Amount">Rs. ${staffTicketAmount(t).toLocaleString()}</td>
+        <td data-label="Status"><span class="staff-status">${staffTicketSafe(st)}</span></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+  }
+
+  window.loadStaffTicketDashboard=async function(){
+    const el=document.getElementById('staffTicketTable');
+    try{
+      const api=await window.__forgeAuthReady;
+      const {auth,db,collection,getDocs}=api;
+      const user=window.__pulseAuthUser||auth.currentUser;
+
+      if(!user){
+        if(el) el.innerHTML='<div class="staff-empty">Please sign in with your staff account.</div>';
+        return;
+      }
+      if(!isStaffEmail(user.email)){
+        if(el) el.innerHTML='<div class="staff-empty">Staff access denied for this account.</div>';
+        return;
+      }
+
+      const snap=await getDocs(collection(db,'tickets'));
+      staffDashboardTickets=snap.docs.map(d=>({
+        id:d.id,
+        firestoreId:d.id,
+        ...d.data()
+      }));
+
+      renderStaffDayTabs();
+      renderStaffTicketDashboard();
+
+      if(!staffDashboardTickets.length && el){
+        el.innerHTML='<div class="staff-empty">No ticket records have been purchased yet.</div>';
+      }
+    }catch(err){
+      console.error('Ticket Records load failed:',err);
+      if(el){
+        const msg=String(err?.code||err?.message||err||'Unknown error')
+          .replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        el.innerHTML='<div class="staff-empty"><strong>Could not load ticket records.</strong><br>Firestore error: '+msg+'<br><small>Check the Firestore rules for the staff account.</small></div>';
+      }
+    }
+  };
+  document.getElementById('staffTicketSearch')?.addEventListener('input',renderStaffTicketDashboard);
+  document.getElementById('staffZoneFilter')?.addEventListener('change',renderStaffTicketDashboard);
+
+  window.loadUserTicketRecords=async function(){
+    const el=document.getElementById('userTicketRecordsTable');
+    try{
+      const api=await window.__forgeAuthReady;
+      const {auth,db,collection,getDocs,query,where}=api;
+      let user=window.__pulseAuthUser||auth.currentUser;
+
+      if(!user && typeof window.__pulseWaitForAuthUser==='function'){
+        try{ user=await window.__pulseWaitForAuthUser(5000); }catch(_){ user=null; }
+      }
+      if(!user){
+        el.innerHTML='<div class="staff-empty">Please sign in to view your ticket records.</div>';
+        return;
+      }
+
+      const q=query(collection(db,'tickets'),where('userId','==',user.uid));
+      const snap=await getDocs(q);
+      const tickets=snap.docs.map(d=>({id:d.id,firestoreId:d.id,...d.data()}))
+        .filter(t=>String(t.paymentStatus||'PAID').toUpperCase()==='PAID')
+        .sort((a,b)=>String(a.bookingDate||a.date||'').localeCompare(String(b.bookingDate||b.date||'')));
+
+      if(!tickets.length){
+        el.innerHTML='<div class="staff-empty">You do not have any ticket records yet. Your purchased tickets will appear here.</div>';
+        return;
+      }
+
+      el.innerHTML=`<div class="staff-table-wrap"><table class="staff-table"><thead><tr>
+        <th>Ticket</th><th>Booking Date</th><th>Pass</th><th>Session</th><th>Zone</th><th>Seat</th><th>Amount</th><th>Status</th>
+      </tr></thead><tbody>${tickets.map(t=>{
+        const status=staffTicketStatus(t);
+        return `<tr>
+          <td data-label="Ticket">${staffTicketSafe(staffTicketValue(t,'token','ticketId')||t.id)}</td>
+          <td data-label="Booking Date">${staffTicketSafe(staffTicketDate(t)||'—')}</td>
+          <td data-label="Pass">${staffTicketSafe(staffTicketValue(t,'planName','passName')||'—')}</td>
+          <td data-label="Session">${staffTicketSafe(staffTicketValue(t,'sessionTime','time','startTime')||'—')}</td>
+          <td data-label="Zone">${staffTicketSafe(t.zone||t.selectedZone||'—')}</td>
+          <td data-label="Seat">${staffTicketSafe(staffTicketSeat(t))}</td>
+          <td data-label="Amount">Rs. ${staffTicketAmount(t).toLocaleString()}</td>
+          <td data-label="Status"><span class="staff-status">${staffTicketSafe(status)}</span></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`;
+    }catch(err){
+      console.error('User ticket records load failed:',err);
+      el.innerHTML='<div class="staff-empty"><strong>Could not load your ticket records.</strong><br>Please try refreshing the page.</div>';
+    }
+  };
+
+  window.openUserTicketRecordsPage=async function(){
+    const {auth}=await window.__forgeAuthReady;
+    const user=window.__pulseAuthUser||auth.currentUser;
+    if(!user){
+      alert('Please log in to view your ticket records.');
+      return;
+    }
+    switchView('ticketRecords');
+    document.getElementById('userTicketRecordsCard').style.display='block';
+    document.getElementById('staffDashboardCard').style.display='none';
+    await loadUserTicketRecords();
+    document.getElementById('userTicketRecordsCard').scrollIntoView({behavior:'smooth',block:'start'});
+  };
+
+  window.openStaffTicketRecordsPage=async function(){
+    const {auth}=await window.__forgeAuthReady;
+    const user=window.__pulseAuthUser||auth.currentUser;
+    if(!user||!isStaffEmail(user.email)){ alert('Staff access denied.'); return; }
+    switchView('ticketRecords');
+    document.getElementById('userTicketRecordsCard').style.display='none';
+    document.getElementById('staffDashboardCard').style.display='block';
+    await loadStaffTicketDashboard();
+    document.getElementById('staffDashboardCard').scrollIntoView({behavior:'smooth',block:'start'});
+  };
+
+  window.openTicketRecordsPage=window.openStaffTicketRecordsPage;
+
+  window.openStaffDashboard=async function(){
+    await window.openStaffTicketRecordsPage();
+  };
+
+  async function openStaffPortal() {
+    const { auth } = await window.__forgeAuthReady;
+    const user = window.__pulseAuthUser || auth.currentUser;
+    if (!user || !isStaffEmail(user.email)) {
+      alert('Staff access denied.');
+      return;
+    }
+    switchView('staffPortal');
   }
 
   async function openStaffScanner() {
@@ -3338,17 +3934,28 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
     document.getElementById('forgotPasswordBtn').addEventListener('click', () => openModal('forgot'));
     document.getElementById('backToLogin').addEventListener('click', () => openModal('login'));
 
+    async function resumePendingCheckout() {
+      const pending = window.__pulsePendingPlan;
+      if (!pending) return;
+      window.__pulsePendingPlan = null;
+      await selectPassPlan(pending.planName, pending.price, pending.durationHours, pending.isNightOwl);
+    }
+
     // Handle Login
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('loginEmail').value;
+      const email = document.getElementById('loginEmail').value.trim().toLowerCase();
       const pass = document.getElementById('loginPassword').value;
       const errBox = document.getElementById('loginError');
       errBox.classList.remove('is-visible');
 
       try {
-        await signInWithEmailAndPassword(auth, email, pass);
+        const credential = await signInWithEmailAndPassword(auth, email, pass);
+        window.__pulseAuthUser = credential.user;
+        // Wait until Firebase has actually populated auth.currentUser.
+        await window.__pulseWaitForAuthUser(10000);
         modal.classList.remove('is-open');
+        await resumePendingCheckout();
       } catch (err) {
         errBox.textContent = err.message;
         errBox.classList.add('is-visible');
@@ -3367,6 +3974,7 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
       try {
         const cleanName = String(name || '').trim();
         const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        window.__pulseAuthUser = cred.user;
 
         // Save the exact name chosen during account creation to Firebase Auth.
         // This makes the same name appear after login from another device/browser.
@@ -3405,19 +4013,23 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
 
     // Handle Logout
     document.getElementById('navLogoutBtn')?.addEventListener('click', async () => {
+      window.__pulseAuthUser = null;
       await signOut(auth);
       switchView('home');
     });
 
     // Auth State Observer
     onAuthStateChanged(auth, async (user) => {
+      window.__pulseAuthUser = user || null;
+      window.__pulseAuthInitialized = true;
+
       const loggedOutNav = document.getElementById('navRightLoggedOut');
       const loggedInNav = document.getElementById('navRightLoggedIn');
       const memberName = document.getElementById('navMemberName');
       const startTrialBtn = document.getElementById('startTrialBtn');
       const heroBookBtn = document.getElementById('heroBookBtn');
       const navMyTicketsLink = document.getElementById('navMyTicketsLink');
-      const navStaffLink = document.getElementById('navStaffLink');
+      const navStaffPortalLink = document.getElementById('navStaffPortalLink');
 
       if (user) {
         // Reload the Auth profile so the latest displayName selected at signup is used.
@@ -3430,9 +4042,14 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
         if (loggedInNav) loggedInNav.style.display = 'flex';
         if (memberName) memberName.textContent = 'Hi, ' + (displayName || emailFallback || 'Gamer');
         if (navMyTicketsLink) navMyTicketsLink.style.display = 'inline-block';
-        if (navStaffLink) navStaffLink.style.display = isStaffEmail(user.email) ? 'inline-block' : 'none';
+        if (navStaffPortalLink) navStaffPortalLink.style.display = isStaffEmail(user.email) ? 'inline-block' : 'none';
 
         modal.classList.remove('is-open');
+
+        if (window.__pulsePendingPlan) {
+          // Auth restoration completed; continue the pass selection automatically.
+          setTimeout(() => resumePendingCheckout(), 0);
+        }
 
         if (startTrialBtn) startTrialBtn.textContent = 'View Rates';
         if (heroBookBtn) heroBookBtn.textContent = 'Reserve a Rig';
@@ -3440,7 +4057,9 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
         if (loggedOutNav) loggedOutNav.style.display = 'flex';
         if (loggedInNav) loggedInNav.style.display = 'none';
         if (navMyTicketsLink) navMyTicketsLink.style.display = 'none';
-        if (navStaffLink) navStaffLink.style.display = 'none';
+        if (navStaffPortalLink) navStaffPortalLink.style.display = 'none';
+        const staffDashboardCard = document.getElementById('staffDashboardCard');
+        if (staffDashboardCard) staffDashboardCard.style.display = 'none';
 
         if (startTrialBtn) startTrialBtn.textContent = 'Book Station';
         if (heroBookBtn) heroBookBtn.textContent = 'Reserve a Rig';
@@ -3457,6 +4076,7 @@ background:rgba(0,255,136,.055);color:#e7edf5;font-weight:800;font-size:11px;cur
     switchView,
     navigateToSection,
     renderUserTickets,
+    openStaffPortal,
     openStaffScanner,
     startStaffScanner,
     stopStaffScanner,
@@ -4678,6 +5298,99 @@ document.addEventListener('click', async (event) => {
   };
 })();
 </script>
+
+
+<script id="pulse-login-reliability-fix">
+(function(){
+  const form = document.getElementById('loginForm');
+  if (!form) return;
+  form.addEventListener('submit', function(){
+    const btn = form.querySelector('button[type="submit"], button:not([type])');
+    if (btn) {
+      setTimeout(() => {
+        btn.disabled = false;
+      }, 2500);
+    }
+  }, true);
+})();
+</script>
+
+
+<!-- ================= SEPARATE TICKET RECORDS PAGE ================= -->
+<div id="ticketRecordsView" class="view-section">
+  <div class="staff-page-wrap">
+    <div class="wrap">
+      <div class="back-btn-row">
+        <button class="back-link" onclick="switchView('staffPortal')">← Back to Staff Portal</button>
+      </div>
+
+      <div class="ticket-records-section-title">
+        <span>TICKET RECORDS</span>
+        <small id="ticketRecordsSubtitle">Your purchased tickets are shown here.</small>
+      </div>
+
+      <div id="userTicketRecordsCard" class="staff-dashboard-card" style="display:none;">
+        <div class="staff-dashboard-head">
+          <h3>My Ticket Records</h3>
+          <button class="action-btn staff-refresh" onclick="loadUserTicketRecords()">↻ Refresh</button>
+        </div>
+        <div id="userTicketRecordsTable" class="staff-empty">Your ticket records will appear here.</div>
+      </div>
+
+      <div id="staffDashboardCard" class="staff-dashboard-card" style="display:none;">
+          <div class="staff-dashboard-head">
+            <h3>Ticket Records</h3>
+            <button class="action-btn staff-refresh" onclick="loadStaffTicketDashboard()">↻ Refresh</button>
+          </div>
+          <div class="staff-stats">
+            <div class="staff-stat"><small>TICKETS SOLD</small><strong id="staffTicketsSold">0</strong></div>
+            <div class="staff-stat"><small>UNIQUE CUSTOMERS</small><strong id="staffCustomers">0</strong></div>
+            <div class="staff-stat"><small>ACTIVE TICKETS</small><strong id="staffActiveTickets">0</strong></div>
+            <div class="staff-stat"><small>SEATS BOOKED</small><strong id="staffSeatsBooked">0</strong></div>
+          </div>
+          <div class="staff-ticket-filters">
+            <div class="staff-filter-group">
+              <label>BOOKING DAY</label>
+              <div id="staffDayTabs" class="staff-day-tabs"></div>
+            </div>
+            <div class="staff-filter-group">
+              <label for="staffZoneFilter">GAMING ZONE</label>
+              <select id="staffZoneFilter" class="staff-filter-select">
+                <option value="ALL">All Zones</option>
+                <option value="ZONE A — ESPORTS">Zone A — Esports</option>
+                <option value="ZONE B — CONSOLE">Zone B — Console</option>
+                <option value="ZONE C — IMMERSIVE">Zone C — Immersive</option>
+              </select>
+            </div>
+          </div>
+          <input id="staffTicketSearch" class="staff-search" placeholder="Search customer name, email, phone, ticket ID, seat or pass...">
+          <div id="staffTicketTable" class="staff-empty">All paid customer ticket purchases will appear here.</div>
+        </div>
+
+        <!-- Contact / location section moved to the bottom of Ticket Records -->
+        <footer class="ticket-records-footer">
+          <div class="wrap" style="width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 30px; padding: 0;">
+            <div class="logo" onclick="switchView('home')">PUL<span>SE</span></div>
+            <div class="footer-cols">
+              <div class="footer-col">
+                <h4>Location</h4>
+                <p>Thamel, Kathmandu, Nepal</p>
+                <p>Open 24 Hours Daily</p>
+              </div>
+              <div class="footer-col">
+                <h4>Contact</h4>
+                <p>support@pulsearena.com</p>
+                <p>+977 1-4000000</p>
+              </div>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            &copy; 2026 PULSE Esports &amp; Gaming Arena. All rights reserved.
+          </div>
+        </footer>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
