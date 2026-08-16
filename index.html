@@ -2908,11 +2908,14 @@
           Zone: ${String(ticket.zone || 'Not specified')}
         `;
       } catch (err) {
-        console.error(err);
+        console.error('🔥 TICKET VERIFICATION ERROR:', err);
         result.className = 'scan-error';
+        const code = String(err?.code || 'unknown-error');
+        const message = String(err?.message || err || 'Unknown error');
         result.innerHTML = `
           <strong>❌ VERIFICATION FAILED</strong><br>
-          Check Firestore configuration and security rules.
+          <small style="display:block;margin-top:8px;color:#ff9b9b;">${code}</small>
+          <small style="display:block;margin-top:5px;color:#ffd0d0;word-break:break-word;">${message}</small>
         `;
       }
     });
@@ -3636,12 +3639,16 @@
     }
   }
 
-  async function consumeTicketAfterScan(ticketRef, ticket, staffUser, updateDoc, serverTimestamp) {
+  async function consumeTicketAfterScan(ticketRef, ticket, staffUser) {
     const validity = getTicketValidity(ticket);
     if (!validity.valid) return validity;
 
     const sessionEnd = getSessionEndDate(ticket);
-    const { db, runTransaction } = await window.__forgeAuthReady;
+    // IMPORTANT: serverTimestamp must be obtained from Firebase here.
+    // The previous version expected it as a function argument, but the scanner
+    // called consumeTicketAfterScan() with only 3 arguments, causing
+    // "serverTimestamp is not defined" during the transaction.
+    const { db, runTransaction, serverTimestamp } = await window.__forgeAuthReady;
 
     const bookingDate = String(ticket?.bookingDate || ticket?.date || '').trim();
     const bookingTime = ticket?.startTime || ticket?.time || '';
